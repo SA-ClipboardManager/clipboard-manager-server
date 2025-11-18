@@ -6,7 +6,7 @@ services:
   # 1. MySQL 데이터베이스 서비스
   mysql-db:
     image: mysql:8.0
-    container_name: clipboard-mysql
+    container_name: clip-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
@@ -16,7 +16,7 @@ services:
     ports:
       - "3306:3306"
     networks:
-      - microservice-net
+      - clip-net
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
@@ -26,64 +26,103 @@ services:
   # 2. RabbitMQ 메시지 브로커 서비스 (Event-Driven Architecture 핵심)
   rabbitmq-broker:
     image: rabbitmq:3.12-management
-    container_name: clipboard-rabbitmq
+    container_name: clip-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     ports:
-      - "5672:5672"
+      - "5672:5672" # AMQP 포트
       - "15672:15672" # Management UI
     networks:
-      - microservice-net
+      - clip-net
 
   # 3. Redis 캐시 서비스
   redis-cache:
     image: redis:7.0-alpine
-    container_name: clipboard-redis
+    container_name: clip-redis
     ports:
       - "6379:6379"
     networks:
-      - microservice-net
+      - clip-net
 
   # embedding Service
-  embedding-service:
+  login-service:
     build:
-      context: ./embedding-service
-      dockerfile: Dockerfile
-    container_name: embedding-service
+      context: ./login-service
+    container_name: login-service
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
-      DATABASE_URL: mysql-db # 내부 네트워크 호스트명
+      DATABASE_URL: mysql-db
+      REDIS_HOST: redis-cache
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - clip-net
+
+  # 5. CRUD Service (데이터 입출력 - Sync Service 역할 포함)
+  crud-service:
+    build:
+      context: ./crud-service
+    container_name: crud-service
+    ports:
+      - "8002:8000"
+    environment:
+      DATABASE_URL: mysql-db
       RABBITMQ_HOST: rabbitmq-broker
-      # ... (인증, 토큰 관련 환경 변수)
     depends_on:
       mysql-db:
         condition: service_healthy
       rabbitmq-broker:
         condition: service_started
     networks:
-      - microservice-net
+      - clip-net
 
-  # Tagging Service
+  # 6. Tagging Service (AI 추론 - 이벤트 컨슈머)
   tagging-service:
     build:
       context: ./tagging-service
-      dockerfile: Dockerfile
     container_name: tagging-service
     environment:
       DATABASE_URL: mysql-db
       RABBITMQ_HOST: rabbitmq-broker
-      # ... (AI 모델 경로 등)
     depends_on:
       rabbitmq-broker:
         condition: service_started
     networks:
-      - microservice-net
+      - clip-net
+
+  # 7. Embedding Service (ko-CLIP 벡터 생성 및 Pinecone 연동)
+  embedding-service:
+    build:
+      context: ./embedding-service
+    container_name: embedding-service
+    environment:
+      RABBITMQ_HOST: rabbitmq-broker
+      # PINECONE_API_KEY: ${PINECONE_API_KEY} # Pinecone API 키 환경 변수
+    depends_on:
+      rabbitmq-broker:
+        condition: service_started
+    networks:
+      - clip-net
+
+  # 8. Monitoring Service (로깅/메트릭 수집)
+  monitoring-service:
+    build:
+      context: ./monitoring-service
+    container_name: monitoring-service
+    environment:
+      RABBITMQ_HOST: rabbitmq-broker
+    depends_on:
+      rabbitmq-broker:
+        condition: service_started
+    networks:
+      - clip-net
 
 volumes:
   mysql_data:
 
 networks:
-  microservice-net:
+  clip-net:
     driver: bridge
