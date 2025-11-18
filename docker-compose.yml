@@ -1,0 +1,89 @@
+# docker-compose.yml
+
+version: "3.8"
+
+services:
+  # 1. MySQL 데이터베이스 서비스
+  mysql-db:
+    image: mysql:8.0
+    container_name: clipboard-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      TZ: Asia/Seoul
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - microservice-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  # 2. RabbitMQ 메시지 브로커 서비스 (Event-Driven Architecture 핵심)
+  rabbitmq-broker:
+    image: rabbitmq:3.12-management
+    container_name: clipboard-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Management UI
+    networks:
+      - microservice-net
+
+  # 3. Redis 캐시 서비스
+  redis-cache:
+    image: redis:7.0-alpine
+    container_name: clipboard-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - microservice-net
+
+  # embedding Service
+  embedding-service:
+    build:
+      context: ./embedding-service
+      dockerfile: Dockerfile
+    container_name: embedding-service
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql-db # 내부 네트워크 호스트명
+      RABBITMQ_HOST: rabbitmq-broker
+      # ... (인증, 토큰 관련 환경 변수)
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq-broker:
+        condition: service_started
+    networks:
+      - microservice-net
+
+  # Tagging Service
+  tagging-service:
+    build:
+      context: ./tagging-service
+      dockerfile: Dockerfile
+    container_name: tagging-service
+    environment:
+      DATABASE_URL: mysql-db
+      RABBITMQ_HOST: rabbitmq-broker
+      # ... (AI 모델 경로 등)
+    depends_on:
+      rabbitmq-broker:
+        condition: service_started
+    networks:
+      - microservice-net
+
+volumes:
+  mysql_data:
+
+networks:
+  microservice-net:
+    driver: bridge
