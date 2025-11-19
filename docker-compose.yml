@@ -1,20 +1,15 @@
-# docker-compose.yml
-
 version: "3.8"
 
 services:
-  # 1. MySQL 데이터베이스 서비스
-  mysql-db:
+  login-mysql-db:
     image: mysql:8.0
-    container_name: clip-mysql
+    container_name: login-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_DATABASE: login_db
       TZ: Asia/Seoul
     volumes:
-      - mysql_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
+      - login_mysql_data:/var/lib/mysql
     networks:
       - clip-net
     healthcheck:
@@ -23,105 +18,203 @@ services:
       timeout: 10s
       retries: 5
 
-  # 2. RabbitMQ 메시지 브로커 서비스 (Event-Driven Architecture 핵심)
+  crud-mysql-db:
+    image: mysql:8.0
+    container_name: crud-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: crud_db
+      TZ: Asia/Seoul
+    volumes:
+      - crud_mysql_data:/var/lib/mysql
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  tagging-mysql-db:
+    image: mysql:8.0
+    container_name: tagging-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: tagging_db
+      TZ: Asia/Seoul
+    volumes:
+      - tagging_mysql_data:/var/lib/mysql
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  monitoring-mysql-db:
+    image: mysql:8.0
+    container_name: monitoring-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: monitoring_db
+      TZ: Asia/Seoul
+    volumes:
+      - monitoring_mysql_data:/var/lib/mysql
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  login-redis-cache:
+    image: redis:7.0-alpine
+    container_name: login-redis
+    networks:
+      - clip-net
+
+  crud-redis-cache:
+    image: redis:7.0-alpine
+    container_name: crud-redis
+    networks:
+      - clip-net
+
+  tagging-redis-cache:
+    image: redis:7.0-alpine
+    container_name: tagging-redis
+    networks:
+      - clip-net
+
+  embedding-redis-cache:
+    image: redis:7.0-alpine
+    container_name: embedding-redis
+    networks:
+      - clip-net
+
+  monitoring-redis-cache:
+    image: redis:7.0-alpine
+    container_name: monitoring-redis
+    networks:
+      - clip-net
+
   rabbitmq-broker:
     image: rabbitmq:3.12-management
     container_name: clip-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
-    ports:
-      - "5672:5672" # AMQP 포트
-      - "15672:15672" # Management UI
     networks:
       - clip-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping", "-q"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # 3. Redis 캐시 서비스
-  redis-cache:
-    image: redis:7.0-alpine
-    container_name: clip-redis
-    ports:
-      - "6379:6379"
-    networks:
-      - clip-net
-
-  # embedding Service
   login-service:
     build:
       context: ./login-service
     container_name: login-service
-    ports:
-      - "8001:8000"
     environment:
-      DATABASE_URL: mysql-db
-      REDIS_HOST: redis-cache
+      DATABASE_URL: login-mysql-db/login_db
+      REDIS_HOST: login-redis-cache
     depends_on:
-      mysql-db:
+      login-mysql-db:
         condition: service_healthy
+      login-redis-cache:
+        condition: service_started
     networks:
       - clip-net
 
-  # 5. CRUD Service (데이터 입출력 - Sync Service 역할 포함)
   crud-service:
     build:
       context: ./crud-service
     container_name: crud-service
-    ports:
-      - "8002:8000"
     environment:
-      DATABASE_URL: mysql-db
+      DATABASE_URL: crud-mysql-db/crud_db
       RABBITMQ_HOST: rabbitmq-broker
+      REDIS_HOST: crud-redis-cache
     depends_on:
-      mysql-db:
+      crud-mysql-db:
         condition: service_healthy
+      crud-redis-cache:
+        condition: service_started
       rabbitmq-broker:
         condition: service_started
     networks:
       - clip-net
 
-  # 6. Tagging Service (AI 추론 - 이벤트 컨슈머)
   tagging-service:
     build:
       context: ./tagging-service
     container_name: tagging-service
     environment:
-      DATABASE_URL: mysql-db
+      DATABASE_URL: tagging-mysql-db/tagging_db
       RABBITMQ_HOST: rabbitmq-broker
+      REDIS_HOST: tagging-redis-cache
     depends_on:
+      tagging-mysql-db:
+        condition: service_healthy
+      tagging-redis-cache:
+        condition: service_started
       rabbitmq-broker:
         condition: service_started
     networks:
       - clip-net
 
-  # 7. Embedding Service (ko-CLIP 벡터 생성 및 Pinecone 연동)
   embedding-service:
     build:
       context: ./embedding-service
     container_name: embedding-service
     environment:
       RABBITMQ_HOST: rabbitmq-broker
-      # PINECONE_API_KEY: ${PINECONE_API_KEY} # Pinecone API 키 환경 변수
+      REDIS_HOST: embedding-redis-cache
+      # PINECONE_API_KEY: ${PINECONE_API_KEY}
     depends_on:
+      embedding-redis-cache:
+        condition: service_started
       rabbitmq-broker:
         condition: service_started
     networks:
       - clip-net
 
-  # 8. Monitoring Service (로깅/메트릭 수집)
   monitoring-service:
     build:
       context: ./monitoring-service
     container_name: monitoring-service
     environment:
+      DATABASE_URL: monitoring-mysql-db/monitoring_db
       RABBITMQ_HOST: rabbitmq-broker
+      REDIS_HOST: monitoring-redis-cache
     depends_on:
+      monitoring-mysql-db:
+        condition: service_healthy
+      monitoring-redis-cache:
+        condition: service_started
       rabbitmq-broker:
         condition: service_started
     networks:
       - clip-net
+  nginx-gateway:
+    image: nginx:stable-alpine
+    container_name: clip-api-gateway
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    networks:
+      - clip-net
+    depends_on:
+      - login-service
+      - crud-service
 
 volumes:
-  mysql_data:
+  login_mysql_data:
+  crud_mysql_data:
+  tagging_mysql_data:
+  monitoring_mysql_data:
 
 networks:
   clip-net:
