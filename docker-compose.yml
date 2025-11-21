@@ -1,6 +1,14 @@
 version: "3.8"
 
 services:
+  adminer:
+    image: adminer
+    container_name: clip-adminer
+    restart: always
+    ports:
+      - "9090:8080"
+    networks:
+      - clip-net
   login-mysql-db:
     image: mysql:8.0
     container_name: login-mysql
@@ -105,6 +113,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "15672:15672"
     networks:
       - clip-net
     healthcheck:
@@ -117,9 +127,15 @@ services:
     build:
       context: ./login-service
     container_name: login-service
+    env_file:
+      - .env
     environment:
+      DB_HOST: login-mysql-db
       DATABASE_URL: login-mysql-db/login_db
       REDIS_HOST: login-redis-cache
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: login_db
     depends_on:
       login-mysql-db:
         condition: service_healthy
@@ -127,15 +143,23 @@ services:
         condition: service_started
     networks:
       - clip-net
+    ports:
+      - "9001:8000"
 
   crud-service:
     build:
       context: ./crud-service
     container_name: crud-service
+    env_file:
+      - .env
     environment:
+      DB_HOST: crud-mysql-db
       DATABASE_URL: crud-mysql-db/crud_db
       RABBITMQ_HOST: rabbitmq-broker
       REDIS_HOST: crud-redis-cache
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: crud_db
     depends_on:
       crud-mysql-db:
         condition: service_healthy
@@ -150,10 +174,16 @@ services:
     build:
       context: ./tagging-service
     container_name: tagging-service
+    env_file:
+      - .env
     environment:
+      DB_HOST: tagging-mysql-db
       DATABASE_URL: tagging-mysql-db/tagging_db
       RABBITMQ_HOST: rabbitmq-broker
       REDIS_HOST: tagging-redis-cache
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: tagging_db
     depends_on:
       tagging-mysql-db:
         condition: service_healthy
@@ -168,10 +198,14 @@ services:
     build:
       context: ./embedding-service
     container_name: embedding-service
+    env_file:
+      - .env
     environment:
       RABBITMQ_HOST: rabbitmq-broker
       REDIS_HOST: embedding-redis-cache
       # PINECONE_API_KEY: ${PINECONE_API_KEY}
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
     depends_on:
       embedding-redis-cache:
         condition: service_started
@@ -184,15 +218,34 @@ services:
     build:
       context: ./monitoring-service
     container_name: monitoring-service
+    env_file:
+      - .env
     environment:
+      DB_HOST: monitoring-mysql-db
       DATABASE_URL: monitoring-mysql-db/monitoring_db
       RABBITMQ_HOST: rabbitmq-broker
       REDIS_HOST: monitoring-redis-cache
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: monitoring_db
     depends_on:
       monitoring-mysql-db:
         condition: service_healthy
       monitoring-redis-cache:
         condition: service_started
+      rabbitmq-broker:
+        condition: service_started
+    networks:
+      - clip-net
+  notification-service:
+    build:
+      context: ./notification-service
+    container_name: notification-service
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_HOST: rabbitmq-broker
+    depends_on:
       rabbitmq-broker:
         condition: service_started
     networks:
@@ -203,12 +256,17 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "80:80"
+      - "8576:80"
     networks:
       - clip-net
+    restart: always
     depends_on:
       - login-service
       - crud-service
+      - notification-service
+      - embedding-service
+      - tagging-service
+      - monitoring-service
 
 volumes:
   login_mysql_data:
