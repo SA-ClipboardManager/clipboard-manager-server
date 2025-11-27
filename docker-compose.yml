@@ -222,7 +222,6 @@ services:
       - .env
     environment:
       DB_HOST: monitoring-mysql-db
-      DATABASE_URL: monitoring-mysql-db/monitoring_db
       RABBITMQ_HOST: rabbitmq-broker
       REDIS_HOST: monitoring-redis-cache
       DB_PASSWORD: ${DB_ROOT_PASSWORD}

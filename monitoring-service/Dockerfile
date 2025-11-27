@@ -1,17 +1,22 @@
-FROM python:3.11-slim
+# 1) Build Stage: Gradle로 Spring Boot JAR 빌드
+FROM gradle:8.5-jdk21 AS builder
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-    
-# 의존성 설치
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 프로젝트 전체 복사
+COPY . .
 
-# 소스 코드 복사
-COPY app/ .
+# bootJar 생성
+RUN gradle bootJar --no-daemon
 
-# Uvicorn 서버 실행 명령어 (FastAPI 실행)
-EXPOSE 8000
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 2) Runtime Stage: Java 21 JRE 이미지
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# builder에서 생성된 JAR 복사
+COPY --from=builder /app/build/libs/*.jar app.jar
+
+# JVM 최적화 옵션 (Worker 서비스에 적합)
+ENV JAVA_OPTS="-XX:+UseG1GC -Duser.timezone=Asia/Seoul"
+
+# Spring Boot 실행
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
