@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -7,7 +8,7 @@ from typing import Dict, Literal, Optional
 import aiomysql
 import bcrypt
 import jwt
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,12 +81,35 @@ app_state = AppState()
 security = HTTPBearer(auto_error=False)
 
 # 사용자 및 인증 관련 테이블만 생성
+async def create_db_pool():
+    retries = 15  # 최대 15번 시도
+    delay = 2  # 2초 간격 (총 30초 대기)
+    
+    for i in range(retries):
+        try:
+            pool = await aiomysql.create_pool(
+                host=settings.db_host,
+                port=settings.db_port,
+                user=settings.db_user,
+                password=settings.db_password,
+                db=settings.db_name,
+                autocommit=True,
+            )
+            logger.info(f"Login Database Connected successfully (Attempt {i+1})")
+            return pool
+        except Exception as e:
+            logger.warning(f"Login DB not ready (Attempt {i+1}/{retries}). Retrying in {delay}s...")
+            await asyncio.sleep(delay)
+    
+    raise ConnectionError("Failed to connect to Login Database after multiple retries.")
+
 async def initialize_database():
     CREATE_TABLES = """
         CREATE TABLE IF NOT EXISTS user (
             user_id VARCHAR(255) PRIMARY KEY,
             password VARCHAR(255) NOT NULL,
-            created_at INTEGER NOT NULL
+            created_at INTEGER NOT NULL,
+            max_count_cloud INTEGER NOT NULL DEFAULT 1000
         );
         
         CREATE TABLE IF NOT EXISTS refresh_token (
@@ -112,25 +136,14 @@ async def initialize_database():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        # MySQL 연결 풀
-        app_state.db_pool = await aiomysql.create_pool(
-            host=settings.db_host,
-            port=settings.db_port,
-            user=settings.db_user,
-            password=settings.db_password,
-            db=settings.db_name,
-            minsize=5,
-            maxsize=20,
-            auth_plugin="mysql_native_password",
-            charset="utf8mb4",
-            autocommit=True,
-        )
-
-        # Redis 연결 및 RateLimiter 초기화
+        # DB 연결 풀 초기화 (재시도 로직 포함)
+        app_state.db_pool = await create_db_pool()
+        
+        # Redis 클라이언트 초기화
         app_state.redis = Redis.from_url(settings.redis_url)
         await FastAPILimiter.init(app_state.redis)
-
-        # DB 초기화
+        
+        # DB 테이블 초기화
         await initialize_database()
         
         logger.info("Login Service Started")
@@ -140,15 +153,14 @@ async def lifespan(app: FastAPI):
         logger.critical(f"Startup failed: {str(e)}")
         raise
     finally:
-        if app_state.db_pool:
+        if hasattr(app_state, 'db_pool') and app_state.db_pool:
             app_state.db_pool.close()
             await app_state.db_pool.wait_closed()
-        if app_state.redis:
+        if hasattr(app_state, 'redis') and app_state.redis:
             await app_state.redis.close()
 
 app = FastAPI(
-    lifespan=lifespan, 
-    root_path="/auth/v1"  
+    lifespan=lifespan
 )
 
 # CORS 설정
@@ -184,23 +196,30 @@ def create_refresh_token(user_id: str, jti: str) -> str:
         algorithm=settings.algorithm
     )
 
-# 내부적으로 토큰을 파싱하는 함수 (Depends용)
-async def get_current_user_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict:
-    if not credentials:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing credentials")
+def decode_access_token(token: str) -> Dict:
+    """액세스 토큰을 디코딩하고 유효성을 검사합니다."""
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             settings.secret_key,
             algorithms=[settings.algorithm]
         )
         if payload.get("type") != "access":
-             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token type")
-        return {"user_id": payload["sub"]}
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token type")
+        return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token expired")
-    except jwt.JWTError as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(e))
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Access token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid access token")
+
+
+# 내부적으로 토큰을 파싱하는 함수 (Depends용)
+async def get_current_user_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict:
+    if not credentials:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing credentials")
+    
+    payload = decode_access_token(credentials.credentials)
+    return {"user_id": payload.get("sub")}
 
 # --------------------------------------------------------------------------
 # 5. API 엔드포인트
@@ -326,47 +345,53 @@ async def refresh_token(request: RefreshTokenRequest, db=Depends(get_db)):
         logger.error("Refresh failed", exc_info=e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@app.get("/api/v1/auth/verify", response_model=UserResponse)
+@app.get("/api/v1/auth/verify")
 async def verify_token(
+    response: Response,
     credentials: HTTPAuthorizationCredentials = Depends(security), 
     db=Depends(get_db)
 ):
-    conn, cursor = db
-    
-    # [수정 1] try 블록 밖에서 먼저 체크 (여기서 401 터지면 바로 반환됨)
+    """
+    Gateway `auth_request`를 위한 엔드포인트.
+    토큰 검증 후 성공 시 200 OK와 헤더에 사용자 정보를 담아 반환.
+    """
     if not credentials:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No credentials")
-
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No credentials provided")
+    
     try:
-        # 1. 토큰 검증
-        payload = jwt.decode(
-            credentials.credentials,
-            settings.secret_key,
-            algorithms=[settings.algorithm]
-        )
-        if payload.get("type") != "access":
-             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token type")
-        
+        # 로컬에서 토큰 검증
+        payload = decode_access_token(credentials.credentials)
         user_id = payload.get("sub")
-
-        await cursor.execute("SELECT user_id, created_at FROM user WHERE user_id = %s", (user_id,))
-        user_info = await cursor.fetchone()
-
-        if not user_info:
-             raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-
-        return user_info
-
-    except HTTPException:
-        raise 
         
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+        if not user_id:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token payload")
+
+        # 사용자 정보 조회
+        conn, cursor = db
+        await cursor.execute(
+            "SELECT user_id, max_count_cloud FROM user WHERE user_id = %s", 
+            (user_id,)
+        )
+        user_info = await cursor.fetchone()
+        
+        if not user_info:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        
+        # NGINX로 전달할 헤더 설정
+        response.headers["X-User-ID"] = user_info["user_id"]
+        response.headers["X-Max-Count-Cloud"] = str(user_info["max_count_cloud"])
+        
+        return {"status": "ok"}
+        
+    except HTTPException as e:
+        # decode_access_token 등에서 발생한 HTTP 예외를 그대로 re-raise
+        raise e
     except Exception as e:
-        logger.error(f"Verification failed: {str(e)}")
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+        logger.error(f"Token verification failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token verification service error"
+        )
 
 @app.get("/api/v1/users/me", response_model=UserResponse)
 async def get_my_info(user: Dict = Depends(get_current_user_token), db=Depends(get_db)):

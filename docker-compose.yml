@@ -6,7 +6,7 @@ services:
     container_name: clip-adminer
     restart: always
     ports:
-      - "9090:8080"
+      - "8081:8080"
     networks:
       - clip-net
   login-mysql-db:
@@ -160,13 +160,15 @@ services:
       DB_PASSWORD: ${DB_ROOT_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: crud_db
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
     depends_on:
       crud-mysql-db:
         condition: service_healthy
       crud-redis-cache:
         condition: service_started
       rabbitmq-broker:
-        condition: service_started
+        condition: service_healthy
     networks:
       - clip-net
 
@@ -190,7 +192,7 @@ services:
       tagging-redis-cache:
         condition: service_started
       rabbitmq-broker:
-        condition: service_started
+        condition: service_healthy
     networks:
       - clip-net
 
@@ -210,7 +212,7 @@ services:
       embedding-redis-cache:
         condition: service_started
       rabbitmq-broker:
-        condition: service_started
+        condition: service_healthy
     networks:
       - clip-net
 
@@ -234,7 +236,7 @@ services:
       monitoring-redis-cache:
         condition: service_started
       rabbitmq-broker:
-        condition: service_started
+        condition: service_healthy
     networks:
       - clip-net
   notification-service:
@@ -245,9 +247,11 @@ services:
       - .env
     environment:
       RABBITMQ_HOST: rabbitmq-broker
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
     depends_on:
       rabbitmq-broker:
-        condition: service_started
+        condition: service_healthy
     networks:
       - clip-net
   nginx-gateway:

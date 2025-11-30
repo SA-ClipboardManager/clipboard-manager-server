@@ -1,3 +1,4 @@
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
-aio-pika>=9.0.0
+aio-pika<10
+PyJWT>=2.8.0

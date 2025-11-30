@@ -4,8 +4,10 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, status, Header
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import aio_pika
+import jwt
 from ws_manager import manager
 
 # 로깅 설정
@@ -14,17 +16,49 @@ logger = logging.getLogger("notification-service")
 
 # 환경 변수
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq-broker")
-RABBITMQ_URL = f"amqp://guest:guest@{RABBITMQ_HOST}/"
+RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
+RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
+ALGORITHM = "HS256"
+
+def verify_token(token: str) -> str:
+    """토큰을 검증하고 user_id를 반환합니다."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token type")
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token payload")
+        return user_id
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+
 
 async def consume_events():
-    """
-    RabbitMQ의 'notifications' Exchange를 구독하고, 
-    메시지가 오면 WebSocket으로 해당 유저에게 전송합니다.
-    """
+    url=f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}/"
     connection = None
     try:
         # 1. RabbitMQ 연결
-        connection = await aio_pika.connect_robust(RABBITMQ_URL)
+        for i in range(15): # Retry for 30 seconds
+            try:
+                connection = await aio_pika.connect_robust(url, reconnect_interval=5)
+                logger.info("Successfully connected to RabbitMQ.")
+                break
+            except aio_pika.exceptions.AMQPConnectionError as e:
+                logger.warning(f"Connecting to RabbitMQ failed (attempt {i+1}/15), retrying in 2 seconds...")
+                if i == 14:
+                    logger.error("Could not connect to RabbitMQ after all retries.")
+                    raise e
+                await asyncio.sleep(2)
+        
+        if connection is None:
+            # This should not be reached if the loop raises an exception, but as a safeguard:
+            logger.error("Failed to establish RabbitMQ connection.")
+            return
+
         channel = await connection.channel()
 
         # 2. Exchange 선언 (Fanout 타입: 모든 큐에 브로드캐스트)
@@ -82,12 +116,35 @@ def health_check():
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     """
     클라이언트가 연결하는 웹소켓 엔드포인트
-    Nginx Gateway에서 인증을 마친 후 접속한다고 가정합니다.
+    Authorization 헤더로 토큰을 검증합니다.
     """
-    # 보안 강화: 실제로는 Nginx가 헤더에 넣어준 X-User-ID와 
-    # URL의 user_id가 일치하는지 검사하는 것이 좋습니다.
-    # headers = websocket.headers
-    # verified_id = headers.get("x-user-id")
+    # Authorization 헤더에서 토큰 추출
+    auth_header = websocket.headers.get("authorization")
+    logger.info(f"WebSocket attempt: user_id={user_id}, auth={auth_header is not None}")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        logger.warning("Missing or invalid Authorization header")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    
+    token = auth_header.split(" ")[1]
+    
+    try:
+        verified_user_id = verify_token(token)
+        logger.info(f"Token verified: {verified_user_id}")
+        # URL의 user_id와 토큰의 user_id가 일치하는지 확인
+        if verified_user_id != user_id:
+            logger.warning(f"User ID mismatch: token={verified_user_id}, url={user_id}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    except HTTPException as e:
+        logger.warning(f"Token verification failed: {e.detail}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    except Exception as e:
+        logger.error(f"Token error: {e}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     
     await manager.connect(user_id, websocket)
     try:
