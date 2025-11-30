@@ -162,6 +162,8 @@ services:
       DB_NAME: crud_db
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - shared_images:/app/shared_images
     depends_on:
       crud-mysql-db:
         condition: service_healthy
@@ -186,6 +188,8 @@ services:
       DB_PASSWORD: ${DB_ROOT_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: tagging_db
+    volumes:
+      - shared_images:/app/shared_images
     depends_on:
       tagging-mysql-db:
         condition: service_healthy
@@ -208,6 +212,8 @@ services:
       # PINECONE_API_KEY: ${PINECONE_API_KEY}
       DB_PASSWORD: ${DB_ROOT_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
+    volumes:
+      - shared_images:/app/shared_images
     depends_on:
       embedding-redis-cache:
         condition: service_started
@@ -229,6 +235,8 @@ services:
       DB_PASSWORD: ${DB_ROOT_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: monitoring_db
+    volumes:
+      - shared_images:/app/shared_images
     depends_on:
       monitoring-mysql-db:
         condition: service_healthy
@@ -248,6 +256,8 @@ services:
       RABBITMQ_HOST: rabbitmq-broker
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - shared_images:/app/shared_images
     depends_on:
       rabbitmq-broker:
         condition: service_healthy
@@ -276,6 +286,8 @@ volumes:
   crud_mysql_data:
   tagging_mysql_data:
   monitoring_mysql_data:
+  shared_images:
+    driver: local
 
 networks:
   clip-net:
