@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     
     # Pinecone Configuration
     PINECONE_API_KEY: str
-    PINECONE_INDEX_NAME: str = "images"
+    PINECONE_INDEX_NAME: str = "clipboard-images"
     PINECONE_DIMENSION: int = 768  # KoCLIP dimension
     PINECONE_METRIC: str = "cosine"
     PINECONE_CLOUD: str = "aws"
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     
     # RabbitMQ Configuration
     RABBITMQ_URL: str = "amqp://guest:guest@rabbitmq:5672/"
-    RABBITMQ_QUEUE: str = "image_embedding_queue"
+    RABBITMQ_IMAGE_QUEUE: str = "embedding_image_queue"
     RABBITMQ_QUEUE_DURABLE: bool = True
     
     # Shared Storage

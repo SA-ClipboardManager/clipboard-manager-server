@@ -6,7 +6,7 @@ Consumes image embedding tasks from the message queue.
 import os
 import json
 import asyncio
-from typing import Callable, Optional
+from typing import Callable, Optional, Awaitable
 from aio_pika import connect, IncomingMessage, Connection, Channel, Queue
 
 from app.core.config import settings
@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 class RabbitMQConsumer(IMessageConsumer):
     """RabbitMQ implementation of message consumer."""
     
-    def __init__(self, message_handler: Callable[[EmbeddingTask], asyncio.coroutine]):
+    def __init__(self, message_handler: Callable[[EmbeddingTask], Awaitable[None]]):
         """
         Initialize RabbitMQ consumer.
         
@@ -28,8 +28,10 @@ class RabbitMQConsumer(IMessageConsumer):
             message_handler: Async function to handle received tasks
         """
         self.rabbitmq_url = settings.RABBITMQ_URL
-        self.queue_name = settings.RABBITMQ_QUEUE
+        self.queue_name = settings.RABBITMQ_IMAGE_QUEUE
         self.queue_durable = settings.RABBITMQ_QUEUE_DURABLE
+        self.exchange_name = "crud_events"
+        self.routing_key = "crud:imgSave_success"
         self.message_handler = message_handler
         
         self._connection: Optional[Connection] = None
@@ -38,6 +40,7 @@ class RabbitMQConsumer(IMessageConsumer):
         self._consumer_tag: Optional[str] = None
         
         logger.info(f"Initialized RabbitMQ consumer for queue: {self.queue_name}")
+        logger.info(f"Subscribing to exchange: {self.exchange_name}, routing_key: {self.routing_key}")
     
     async def start(self):
         """Start consuming messages from RabbitMQ queue."""
@@ -47,13 +50,27 @@ class RabbitMQConsumer(IMessageConsumer):
             self._connection = await connect(self.rabbitmq_url)
             self._channel = await self._connection.channel()
             
+            # Declare exchange (topic type for routing)
+            exchange = await self._channel.declare_exchange(
+                self.exchange_name,
+                "topic",
+                durable=True
+            )
+            
             # Declare queue
             self._queue = await self._channel.declare_queue(
                 self.queue_name,
                 durable=self.queue_durable
             )
             
+            # Bind queue to exchange with routing key
+            await self._queue.bind(
+                exchange=self.exchange_name,
+                routing_key=self.routing_key
+            )
+            
             logger.info(f"Connected to queue: {self.queue_name}")
+            logger.info(f"Bound to exchange: {self.exchange_name} with routing_key: {self.routing_key}")
             logger.info("Waiting for messages. To exit press CTRL+C")
             
             # Start consuming
@@ -92,18 +109,32 @@ class RabbitMQConsumer(IMessageConsumer):
                 body = json.loads(message.body.decode())
                 logger.info(f"Received message: {body}")
                 
-                # Create task model
+                # Extract event and data
+                event = body.get("event")
+                data = body.get("data", {})
+                
+                # Validate event type
+                if event != "crud:imgSave_success":
+                    logger.warning(f"Unexpected event type: {event}")
+                    return
+                
+                # Create task model from crud:imgSave_success data
                 task = EmbeddingTask(
-                    uuid=body.get("uuid"),
-                    file_path=body.get("file_path"),
-                    user_id=body.get("user_id"),
-                    correlation_id=body.get("correlation_id")
+                    uuid=data.get("data_id"),
+                    file_path=data.get("file_path"),
+                    user_id=data.get("user_id"),
+                    correlation_id=data.get("data_id")  # Use data_id as correlation_id
                 )
                 
                 # Set correlation ID for logging
                 from app.core.logging import setup_logging
                 correlation_filter = setup_logging(settings.LOG_LEVEL)
                 correlation_filter.set_correlation_id(task.correlation_id)
+                
+                logger.info(
+                    f"Processing crud:imgSave_success - "
+                    f"data_id: {task.uuid}, user: {task.user_id}, path: {task.file_path}"
+                )
                 
                 # Validate file exists
                 if not os.path.exists(task.file_path):
@@ -113,7 +144,7 @@ class RabbitMQConsumer(IMessageConsumer):
                 # Call handler
                 await self.message_handler(task)
                 
-                logger.info(f"Successfully processed message for image: {task.uuid}")
+                logger.info(f"Successfully processed crud:imgSave_success for image: {task.uuid}")
                 
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in message: {e}")

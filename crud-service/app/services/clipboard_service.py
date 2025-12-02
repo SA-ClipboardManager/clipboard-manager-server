@@ -45,10 +45,31 @@ class ClipboardService:
         # 저장
         await self.clipboard_repo.update(item)
         
-        # 이벤트 발행
-        payload = item_create.model_dump()
-        payload["user_id"] = user_id
-        await self.message_broker.publish_event("clip_created", payload)
+        # 타입별 이벤트 발행
+        if item_create.type == "txt":
+            payload = item_create.model_dump()
+            payload["user_id"] = user_id
+            await self.message_broker.publish_event("crud:txtSave_success", payload)
+        elif item_create.type == "img":
+            # 이미지 메타데이터 조회
+            img_meta = await self.image_repo.get_by_data_id(item_create.id)
+            
+            payload = {
+                "data_id": item_create.id,
+                "user_id": user_id,
+                "format": item_create.format,
+                "created_at": item_create.created_at,
+            }
+            
+            # 이미지 메타 정보가 있으면 URL 변환해서 포함
+            if img_meta:
+                payload["file_path"] = self._convert_path_to_url(img_meta.get("file_path"))
+                payload["thumbnail_path"] = self._convert_path_to_url(img_meta.get("thumbnail_path"))
+                payload["width"] = img_meta.get("width")
+                payload["height"] = img_meta.get("height")
+                payload["file_size"] = img_meta.get("file_size")
+            
+            await self.message_broker.publish_event("crud:imgSave_success", payload)
         
         return item_create
     
@@ -64,6 +85,40 @@ class ClipboardService:
             if event.operation in ["INSERT", "UPDATE"]:
                 # 아이템 저장
                 await self._save_item_from_sync(event.args, user_id)
+                
+                # 타입별 저장 성공 이벤트 발행
+                if event.args.get("type") == "txt":
+                    event_payload = {
+                        "data_id": event.args.get("id"),
+                        "user_id": user_id,
+                        "content": event.args.get("content"),
+                        "format": event.args.get("format"),
+                        "created_at": event.args.get("created_at"),
+                        "correlation_id": event.correlation_id
+                    }
+                    await self.message_broker.publish_event("crud:txtSave_success", event_payload)
+                    
+                elif event.args.get("type") == "img":
+                    # 이미지 메타데이터 조회
+                    img_meta = await self.image_repo.get_by_data_id(event.args.get("id"))
+                    
+                    event_payload = {
+                        "data_id": event.args.get("id"),
+                        "user_id": user_id,
+                        "format": event.args.get("format"),
+                        "created_at": event.args.get("created_at"),
+                        "correlation_id": event.correlation_id
+                    }
+                    
+                    # 이미지 메타 정보가 있으면 URL 변환해서 포함
+                    if img_meta:
+                        event_payload["file_path"] = self._convert_path_to_url(img_meta.get("file_path"))
+                        event_payload["thumbnail_path"] = self._convert_path_to_url(img_meta.get("thumbnail_path"))
+                        event_payload["width"] = img_meta.get("width")
+                        event_payload["height"] = img_meta.get("height")
+                        event_payload["file_size"] = img_meta.get("file_size")
+                    
+                    await self.message_broker.publish_event("crud:imgSave_success", event_payload)
                 
                 # 태그 이벤트 발행
                 if "tags" in event.args and event.args["tags"]:
@@ -154,14 +209,85 @@ class ClipboardService:
         
         await self.clipboard_repo.update(item)
     
+    def _convert_path_to_url(self, path: Optional[str]) -> Optional[str]:
+        """파일 경로를 HTTP URL로 변환"""
+        from ..core.config import settings
+        import os
+        
+        if not path:
+            return None
+        
+        # 이미 HTTP URL인 경우
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        
+        # /app/shared_images/uploads/... 형식을 /local/... 형식으로 변환
+        if path.startswith("/app/shared_images/uploads/"):
+            rel_path = path.replace("/app/shared_images/uploads/", "")
+            return f"{settings.server_url}/local/{rel_path}"
+        elif path.startswith("/app/shared_images/"):
+            # 레거시 경로 처리
+            filename = os.path.basename(path)
+            return f"{settings.server_url}/local/original/{filename}"
+        elif path.startswith("/local/"):
+            return f"{settings.server_url}{path}"
+        
+        return path
+    
     def _row_to_response(self, row: Dict[str, Any]) -> ClipboardItemResponse:
         """DB 행을 응답 모델로 변환"""
+        from ..core.config import settings
+        import os
+        
         img_meta = None
+        content = row.get("content", "")
+        
         if row.get("file_path"):
+            # 로컬 경로를 HTTP URL로 변환
+            file_path = row["file_path"]
+            thumbnail_path = row.get("thumbnail_path")
+            
+            print(f"[DEBUG] Original file_path: {file_path}")
+            print(f"[DEBUG] Original thumbnail_path: {thumbnail_path}")
+            
+            # /app/shared_images/uploads/... 형식을 /local/... 형식으로 변환
+            if file_path and file_path.startswith("/app/shared_images/uploads/"):
+                # /app/shared_images/uploads/original/xxx.png -> /local/original/xxx.png
+                rel_path = file_path.replace("/app/shared_images/uploads/", "")
+                file_path = f"/local/{rel_path}"
+                print(f"[DEBUG] Converted file_path: {file_path}")
+            elif file_path and file_path.startswith("/app/shared_images/"):
+                # 레거시: /app/shared_images/xxx.png -> /local/original/xxx.png
+                filename = os.path.basename(file_path)
+                file_path = f"/local/original/{filename}"
+                print(f"[DEBUG] Legacy converted file_path: {file_path}")
+            
+            if thumbnail_path and thumbnail_path.startswith("/app/shared_images/uploads/"):
+                rel_path = thumbnail_path.replace("/app/shared_images/uploads/", "")
+                thumbnail_path = f"/local/{rel_path}"
+                print(f"[DEBUG] Converted thumbnail_path: {thumbnail_path}")
+            elif thumbnail_path and thumbnail_path.startswith("/app/shared_images/"):
+                filename = os.path.basename(thumbnail_path)
+                thumbnail_path = f"/local/thumbnail/{filename}"
+                print(f"[DEBUG] Legacy converted thumbnail_path: {thumbnail_path}")
+            
+            # /local/... 형식이면 전체 URL로 변환
+            if file_path and file_path.startswith("/local/"):
+                file_path = f"{settings.server_url}{file_path}"
+            if thumbnail_path and thumbnail_path.startswith("/local/"):
+                thumbnail_path = f"{settings.server_url}{thumbnail_path}"
+            
+            # 이미지인 경우 content를 file_path로 설정 (UI에서 src로 사용)
+            if row.get("type") == "img" and file_path:
+                content = file_path
+            
             img_meta = {
-                k: row[k]
-                for k in ["width", "height", "file_size", "file_path", "thumbnail_path"]
-                if k in row
+                "width": row.get("width"),
+                "height": row.get("height"),
+                "file_size": row.get("file_size"),
+                "file_path": file_path,
+                "thumbnail_path": thumbnail_path,
+                "thumbnail_url": thumbnail_path  # 클라이언트 호환성
             }
         
         return ClipboardItemResponse(
@@ -169,7 +295,7 @@ class ClipboardService:
             user_id=row["user_id"],
             type=row["type"],
             format=row["format"],
-            content=row.get("content", ""),
+            content=content,
             created_at=row["created_at"],
             image_meta=img_meta,
             tags=[]

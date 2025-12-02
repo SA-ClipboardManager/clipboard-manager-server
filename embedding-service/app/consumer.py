@@ -38,7 +38,7 @@ async def main():
     logger.info("=" * 60)
     logger.info("Starting Embedding Service Consumer")
     logger.info(f"RabbitMQ URL: {settings.RABBITMQ_URL}")
-    logger.info(f"Queue: {settings.RABBITMQ_QUEUE}")
+    logger.info(f"Queue: {settings.RABBITMQ_IMAGE_QUEUE}")
     logger.info(f"Pinecone Index: {settings.PINECONE_INDEX_NAME}")
     logger.info(f"KoCLIP Model: {settings.KOCLIP_MODEL_REPO}")
     logger.info("=" * 60)
@@ -80,7 +80,6 @@ async def shutdown():
         await consumer.stop()
     
     logger.info("Consumer shutdown complete")
-    sys.exit(0)
 
 
 if __name__ == "__main__":

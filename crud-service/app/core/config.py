@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key-here"
     algorithm: str = "HS256"
     
+    # Server
+    server_url: str = "http://localhost:8576"
+    
     # Storage
     shared_image_dir: str = "/app/shared_images"
     

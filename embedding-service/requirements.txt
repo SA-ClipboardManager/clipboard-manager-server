@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-dotenv
-pinecone-client
+pinecone
 transformers
 torch
 pillow

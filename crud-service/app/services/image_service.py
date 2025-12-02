@@ -105,12 +105,17 @@ class ImageService:
             )
             await self.image_repo.create(meta)
             
-            # 이벤트 발행
-            await self.message_broker.publish_event("image_created", {
+            # 이벤트 발행: crud:imgSave_success
+            await self.message_broker.publish_event("crud:imgSave_success", {
                 "data_id": item_id,
                 "user_id": user_id,
                 "file_path": orig_path_fs,
-                "created_at": created_at
+                "thumbnail_path": thumb_path_fs,
+                "created_at": created_at,
+                "format": format,
+                "width": width,
+                "height": height,
+                "file_size": file_size
             })
             
             return {
@@ -153,8 +158,9 @@ class ImageService:
         file_size = len(file_content)
         
         # 파일 저장
-        file_path = os.path.join(settings.shared_image_dir, f"{item_id}.{format}")
-        thumb_path = os.path.join(settings.shared_image_dir, f"{item_id}_thumb.jpg")
+        ext = format.lower() if format else 'png'
+        file_path = os.path.join(settings.original_dir, f"{item_id}.{ext}")
+        thumb_path = os.path.join(settings.thumbnail_dir, f"{item_id}_thumb.jpg")
         
         async with aiofiles.open(file_path, 'wb') as f:
             await f.write(file_content)
@@ -162,16 +168,33 @@ class ImageService:
         # 썸네일 생성
         await self._create_thumbnail(img, thumb_path, size=(200, 200))
         
+        # URL 경로 생성
+        file_url = f"/local/original/{item_id}.{ext}"
+        thumb_url = f"/local/thumbnail/{item_id}_thumb.jpg"
+        
         # 메타데이터 저장
         meta = ImageMeta(
             data_id=item_id,
             width=width,
             height=height,
             file_size=file_size,
-            file_path=file_path,
-            thumbnail_path=thumb_path
+            file_path=file_url,
+            thumbnail_path=thumb_url
         )
         await self.image_repo.update(meta)
+        
+        # 이벤트 발행: crud:imgSave_success
+        await self.message_broker.publish_event("crud:imgSave_success", {
+            "data_id": item_id,
+            "user_id": user_id,
+            "file_path": file_path,
+            "thumbnail_path": thumb_path,
+            "created_at": created_ts,
+            "format": ext,
+            "width": width,
+            "height": height,
+            "file_size": file_size
+        })
         
         return {"id": item_id, "status": "created"}
     
@@ -181,12 +204,22 @@ class ImageService:
         path: str,
         size: Tuple[int, int] = (256, 256)
     ):
-        """썸네일 생성"""
+        """썸네일 생성 (RGBA 이미지 처리 포함)"""
         loop = asyncio.get_running_loop()
         
         def save_thumb():
             thumb = image.copy()
             thumb.thumbnail(size)
+            
+            # RGBA 이미지인 경우 RGB로 변환
+            if thumb.mode in ('RGBA', 'LA', 'P'):
+                # 흰색 배경 생성
+                background = Image.new('RGB', thumb.size, (255, 255, 255))
+                if thumb.mode == 'P':
+                    thumb = thumb.convert('RGBA')
+                background.paste(thumb, mask=thumb.split()[-1] if thumb.mode in ('RGBA', 'LA') else None)
+                thumb = background
+            
             thumb.save(path, "JPEG", quality=85)
         
         await loop.run_in_executor(None, save_thumb)

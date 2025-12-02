@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 소스 코드 복사 (Clean Architecture structure)
 COPY app/ ./app/
 
-# Uvicorn 서버 실행 명령어 (FastAPI 실행)
-# To run consumer instead: CMD ["python", "app/consumer.py"]
+# Uvicorn 서버와 Consumer를 동시에 실행
 EXPOSE 8000
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app.start"]

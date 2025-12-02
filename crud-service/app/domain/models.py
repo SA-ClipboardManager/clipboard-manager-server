@@ -54,6 +54,7 @@ class ImageMetaResponse(BaseModel):
     file_size: int
     file_path: str
     thumbnail_path: Optional[str] = None
+    thumbnail_url: Optional[str] = None  # 클라이언트 호환성
 
 
 class SyncEventItem(BaseModel):

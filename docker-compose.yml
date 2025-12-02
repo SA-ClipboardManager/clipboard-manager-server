@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   adminer:
     image: adminer
@@ -60,22 +58,22 @@ services:
       timeout: 10s
       retries: 5
 
-  monitoring-mysql-db:
-    image: mysql:8.0
-    container_name: monitoring-mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: monitoring_db
-      TZ: Asia/Seoul
-    volumes:
-      - monitoring_mysql_data:/var/lib/mysql
-    networks:
-      - clip-net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 10s
-      retries: 5
+  # monitoring-mysql-db:
+  #   image: mysql:8.0
+  #   container_name: monitoring-mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+  #     MYSQL_DATABASE: monitoring_db
+  #     TZ: Asia/Seoul
+  #   volumes:
+  #     - monitoring_mysql_data:/var/lib/mysql
+  #   networks:
+  #     - clip-net
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+  #     interval: 5s
+  #     timeout: 10s
+  #     retries: 5
 
   login-redis-cache:
     image: redis:7.0-alpine
@@ -101,11 +99,11 @@ services:
     networks:
       - clip-net
 
-  monitoring-redis-cache:
-    image: redis:7.0-alpine
-    container_name: monitoring-redis
-    networks:
-      - clip-net
+  # monitoring-redis-cache:
+  #   image: redis:7.0-alpine
+  #   container_name: monitoring-redis
+  #   networks:
+  #     - clip-net
 
   rabbitmq-broker:
     image: rabbitmq:3.12-management
@@ -163,7 +161,7 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       crud-mysql-db:
         condition: service_healthy
@@ -189,7 +187,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: tagging_db
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       tagging-mysql-db:
         condition: service_healthy
@@ -208,12 +206,14 @@ services:
       - .env
     environment:
       RABBITMQ_HOST: rabbitmq-broker
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq-broker:5672/
+      RABBITMQ_IMAGE_QUEUE: embedding_image_queue
       REDIS_HOST: embedding-redis-cache
       # PINECONE_API_KEY: ${PINECONE_API_KEY}
       DB_PASSWORD: ${DB_ROOT_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       embedding-redis-cache:
         condition: service_started
@@ -222,30 +222,30 @@ services:
     networks:
       - clip-net
 
-  monitoring-service:
-    build:
-      context: ./monitoring-service
-    container_name: monitoring-service
-    env_file:
-      - .env
-    environment:
-      DB_HOST: monitoring-mysql-db
-      RABBITMQ_HOST: rabbitmq-broker
-      REDIS_HOST: monitoring-redis-cache
-      DB_PASSWORD: ${DB_ROOT_PASSWORD}
-      SECRET_KEY: ${SECRET_KEY}
-      DB_NAME: monitoring_db
-    volumes:
-      - shared_images:/app/shared_images
-    depends_on:
-      monitoring-mysql-db:
-        condition: service_healthy
-      monitoring-redis-cache:
-        condition: service_started
-      rabbitmq-broker:
-        condition: service_healthy
-    networks:
-      - clip-net
+  # monitoring-service:
+  #   build:
+  #     context: ./monitoring-service
+  #   container_name: monitoring-service
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     DB_HOST: monitoring-mysql-db
+  #     RABBITMQ_HOST: rabbitmq-broker
+  #     REDIS_HOST: monitoring-redis-cache
+  #     DB_PASSWORD: ${DB_ROOT_PASSWORD}
+  #     SECRET_KEY: ${SECRET_KEY}
+  #     DB_NAME: monitoring_db
+  #   volumes:
+  #     - shared_images:/app/shared_images
+  #   depends_on:
+  #     monitoring-mysql-db:
+  #       condition: service_healthy
+  #     monitoring-redis-cache:
+  #       condition: service_started
+  #     rabbitmq-broker:
+  #       condition: service_healthy
+  #   networks:
+  #     - clip-net
   notification-service:
     build:
       context: ./notification-service
@@ -257,7 +257,7 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       rabbitmq-broker:
         condition: service_healthy
@@ -279,13 +279,13 @@ services:
       - notification-service
       - embedding-service
       - tagging-service
-      - monitoring-service
+      # - monitoring-service
 
 volumes:
   login_mysql_data:
   crud_mysql_data:
   tagging_mysql_data:
-  monitoring_mysql_data:
+  # monitoring_mysql_data:
   shared_images:
     driver: local
 

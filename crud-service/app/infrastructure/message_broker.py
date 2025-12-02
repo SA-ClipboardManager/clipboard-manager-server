@@ -3,9 +3,10 @@
 """
 import asyncio
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import aio_pika
-from aio_pika import Channel, Connection
+from aio_pika import Channel
+from aio_pika.abc import AbstractRobustConnection
 
 from ..core.config import settings
 from ..core.logging import logger
@@ -15,7 +16,7 @@ class MessageBroker:
     """RabbitMQ 메시지 브로커 관리자"""
     
     def __init__(self):
-        self.connection: Optional[Connection] = None
+        self.connection: Optional[AbstractRobustConnection] = None
         self.channel: Optional[Channel] = None
     
     async def connect(self, retries: int = 15, delay: int = 2) -> Channel:
@@ -56,11 +57,22 @@ class MessageBroker:
             return
         
         try:
-            # 'notifications' exchange를 fanout으로 선언
-            exchange = await self.channel.declare_exchange(
-                "notifications",
-                aio_pika.ExchangeType.FANOUT
-            )
+            # 이벤트 타입에 따라 적절한 exchange 선택
+            if topic.startswith("crud:"):
+                # CRUD 이벤트는 topic exchange로 발행
+                exchange = await self.channel.declare_exchange(
+                    "crud_events",
+                    aio_pika.ExchangeType.TOPIC,
+                    durable=True
+                )
+                routing_key = topic
+            else:
+                # 기존 notifications는 fanout으로 유지
+                exchange = await self.channel.declare_exchange(
+                    "notifications",
+                    aio_pika.ExchangeType.FANOUT
+                )
+                routing_key = ""
             
             # 메시지 생성
             message_body = {
@@ -76,8 +88,8 @@ class MessageBroker:
             )
             
             # 메시지 발행
-            await exchange.publish(message, routing_key="")
-            logger.info(f"[MQ Sent] Event: {topic}, User: {data.get('user_id')}")
+            await exchange.publish(message, routing_key=routing_key)
+            logger.info(f"[MQ Sent] Event: {topic}, User: {data.get('user_id')}, Data: {data.get('data_id')}")
         
         except Exception as e:
             logger.error(f"Failed to publish event: {e}", exc_info=True)

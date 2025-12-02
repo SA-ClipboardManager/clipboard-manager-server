@@ -64,6 +64,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# 이미지 디렉토리 자동 생성
+os.makedirs(settings.original_dir, exist_ok=True)
+os.makedirs(settings.thumbnail_dir, exist_ok=True)
+
 # 정적 파일 서빙
 app.mount(
     "/local/original",
