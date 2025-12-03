@@ -22,6 +22,7 @@ router = APIRouter()
 async def search_images(
     request: SearchRequest,
     x_correlation_id: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
     embedding_service: EmbeddingService = Depends(get_embedding_service)
 ):
     """
@@ -57,7 +58,8 @@ async def search_images(
         # Execute search
         response = await embedding_service.search_images(
             request=request,
-            correlation_id=x_correlation_id
+            correlation_id=x_correlation_id,
+            user_id=x_user_id
         )
         
         return response

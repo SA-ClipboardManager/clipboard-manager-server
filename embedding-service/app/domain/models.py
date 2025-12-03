@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class SearchRequest(BaseModel):
     """Request model for image search."""
     query: str = Field(..., description="Search query text")
-    top_k: int = Field(default=5, ge=1, le=100, description="Number of results to return")
+    top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return")
 
 
 class SearchResult(BaseModel):

@@ -126,7 +126,8 @@ class PineconeRepository(IVectorRepository):
         self,
         vector: List[float],
         top_k: int = 5,
-        include_metadata: bool = True
+        include_metadata: bool = True,
+        filter: Optional[Dict[str, Any]] = None
     ) -> VectorSearchResult:
         """Query similar vectors from Pinecone."""
         try:
@@ -139,7 +140,8 @@ class PineconeRepository(IVectorRepository):
                 lambda: index.query(
                     vector=vector,
                     top_k=top_k,
-                    include_metadata=include_metadata
+                    include_metadata=include_metadata,
+                    filter=filter if filter else None
                 )
             )
             

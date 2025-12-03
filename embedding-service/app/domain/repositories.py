@@ -49,7 +49,8 @@ class IVectorRepository(ABC):
         self,
         vector: List[float],
         top_k: int = 5,
-        include_metadata: bool = True
+        include_metadata: bool = True,
+        filter: Optional[Dict[str, Any]] = None
     ) -> VectorSearchResult:
         """
         Query similar vectors.
@@ -58,6 +59,7 @@ class IVectorRepository(ABC):
             vector: Query vector
             top_k: Number of results to return
             include_metadata: Whether to include metadata
+            filter: Optional metadata filter (e.g., {"userid": "user_123"})
             
         Returns:
             VectorSearchResult with matches

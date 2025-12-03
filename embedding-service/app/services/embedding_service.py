@@ -39,7 +39,8 @@ class EmbeddingService:
     async def search_images(
         self,
         request: SearchRequest,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> SearchResponse:
         """
         Search for similar images using text query.
@@ -59,10 +60,13 @@ class EmbeddingService:
             logger.debug(f"Generated query vector (dim: {len(query_vector)})")
             
             # 2. Search in vector database
+            # Apply user filter if provided
+            metadata_filter = {"userid": user_id} if user_id else None
             search_result = await self.vector_repo.query_vectors(
                 vector=query_vector,
                 top_k=request.top_k,
-                include_metadata=True
+                include_metadata=True,
+                filter=metadata_filter
             )
             
             # 3. Transform to response format
@@ -95,7 +99,7 @@ class EmbeddingService:
         correlation_id: Optional[str] = None
     ) -> DeleteResponse:
         """
-        Delete an image vector with permission check.
+        Delete an image vector with ownership verification.
         
         Args:
             request: Delete request with user_id and image_uuid
@@ -105,9 +109,6 @@ class EmbeddingService:
             DeleteResponse confirming deletion
         """
         try:
-            logger.info(f"Deleting image: {request.image_uuid} (user: {request.user_id})")
-            
-            # 1. Fetch vector to check ownership
             vector_data = await self.vector_repo.fetch_vector(request.image_uuid)
             
             if vector_data is None:
