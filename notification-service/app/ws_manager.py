@@ -33,4 +33,12 @@ class ConnectionManager:
                 except Exception:
                     self.disconnect(user_id, connection)
 
+        async def broadcast_tagging_result(self, user_id: str, data_id: str, tags: List[dict]):
+            await self.broadcast(user_id, {
+                "type": "tagging_result",
+                "data_id": data_id,
+                "user_id": user_id,
+                "tags": tags
+            })
+
 manager = ConnectionManager()
