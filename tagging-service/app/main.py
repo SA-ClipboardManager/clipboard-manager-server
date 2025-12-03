@@ -4,8 +4,10 @@ from typing import List, Optional
 from PIL import Image
 import io, httpx, os
 
-from .infrastructure.config_loader import load_model_config, load_labels
-from .services.tagger import TaggingService
+from .infrastructure.labels import load_labels
+from .services.tagger import TaggingService  # HTTP API용 (DB 저장 없음)
+from .core.config import settings
+from .infrastructure.database import init_db, close_db
 
 app = FastAPI(title="Tagging Service", version="1.0.0")
 
@@ -22,24 +24,33 @@ class TagResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    cfg = load_model_config()
-    labels = load_labels(cfg["labels_path"])
+    """애플리케이션 시작 시 초기화"""
+    # 데이터베이스 초기화
+    await init_db()
+    
+    # HTTP API용 태거 초기화 (DB 저장 없음)
+    labels = load_labels(settings.LABELS_PATH)
     app.state.tagger = TaggingService(
-        model_path=cfg["model_path"],
+        model_path=settings.MODEL_PATH,
         labels=labels,
-        input_size=cfg["input_size"],
-        mean=cfg["mean"],
-        std=cfg["std"],
-        apply_softmax=cfg["apply_softmax"],
-        default_top_k=cfg["top_k"],
+        input_size=224,
+        mean=(0.485, 0.456, 0.406),
+        std=(0.229, 0.224, 0.225),
+        apply_softmax=True,
+        default_top_k=settings.TOP_K,
     )
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """애플리케이션 종료 시 정리"""
+    await close_db()
 
 @app.get("/healthz")
 async def health():
     return {
         "status": "ok",
-        "model_path": os.getenv("MODEL_PATH"),
-        "labels_path": os.getenv("LABELS_PATH")
+        "model_path": settings.MODEL_PATH,
+        "labels_path": settings.LABELS_PATH
     }
 
 @app.post("/tag/image", response_model=TagResponse)

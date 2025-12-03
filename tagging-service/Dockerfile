@@ -13,17 +13,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 
 # 모델/라벨을 이미지에 포함 (tagging-service/models 디렉터리에 미리 추가)
-COPY models/mobilenetv3_trained.onnx /models/mobilenetv3/model.onnx
-COPY models/Classes.py /models/mobilenetv3/Classes.py
+COPY models/mobilenetv3_trained.onnx /app/models/mobilenetv3_trained.onnx
+COPY models/Classes.py /app/models/Classes.py
 
 # 기본 환경변수(컴포즈에서 override 가능)
-ENV MODEL_PATH=/models/mobilenetv3/model.onnx \
-    LABELS_PATH=/models/mobilenetv3/Classes.py \
-    MODEL_INPUT_SIZE=224 \
-    MODEL_MEAN=0.485,0.456,0.406 \
-    MODEL_STD=0.229,0.224,0.225 \
-    MODEL_SOFTMAX=true \
+ENV MODEL_PATH=/app/models/mobilenetv3_trained.onnx \
+    LABELS_PATH=/app/models/Classes.py \
     TOP_K=5
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# FastAPI 서버와 Consumer를 함께 실행
+CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 & python -m app.consumer"
