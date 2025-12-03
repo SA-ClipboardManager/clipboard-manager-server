@@ -4,7 +4,7 @@ services:
     container_name: clip-adminer
     restart: always
     ports:
-      - "8081:8080"
+      - '8082:8080'
     networks:
       - clip-net
   login-mysql-db:
@@ -19,7 +19,7 @@ services:
     networks:
       - clip-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 5s
       timeout: 10s
       retries: 5
@@ -36,7 +36,7 @@ services:
     networks:
       - clip-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 5s
       timeout: 10s
       retries: 5
@@ -48,12 +48,14 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: tagging_db
       TZ: Asia/Seoul
+    ports:
+      - '3308:3306'
     volumes:
       - tagging_mysql_data:/var/lib/mysql
     networks:
       - clip-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 5s
       timeout: 10s
       retries: 5
@@ -70,7 +72,7 @@ services:
     networks:
       - clip-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 5s
       timeout: 10s
       retries: 5
@@ -112,11 +114,11 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     ports:
-      - "15672:15672"
+      - '15672:15672'
     networks:
       - clip-net
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping", "-q"]
+      test: ['CMD', 'rabbitmq-diagnostics', 'ping', '-q']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -142,7 +144,7 @@ services:
     networks:
       - clip-net
     ports:
-      - "9001:8000"
+      - '9001:8000'
 
   crud-service:
     build:
@@ -179,20 +181,30 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: tagging-mysql-db
-      DATABASE_URL: tagging-mysql-db/tagging_db
+      # MySQL 설정
+      MYSQL_HOST: tagging-mysql-db
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: tagging_db
+      # RabbitMQ 설정
       RABBITMQ_HOST: rabbitmq-broker
-      REDIS_HOST: tagging-redis-cache
-      DB_PASSWORD: ${DB_ROOT_PASSWORD}
-      SECRET_KEY: ${SECRET_KEY}
-      DB_NAME: tagging_db
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASS}
+      RABBITMQ_QUEUE: tagging_queue
+      RABBITMQ_QUEUE_DURABLE: 'true'
+      RABBITMQ_EXCHANGE: crud_events
+      RABBITMQ_ROUTING_KEY: 'crud:imgSave_success'
+      # 모델 설정
+      MODEL_PATH: /app/models/mobilenetv3_trained.onnx
+      LABELS_PATH: /app/models/Classes.py
+      TAGGING_MIN_SCORE: '0.5'
     volumes:
       - ./my_local_images:/app/shared_images
     depends_on:
       tagging-mysql-db:
         condition: service_healthy
-      tagging-redis-cache:
-        condition: service_started
       rabbitmq-broker:
         condition: service_healthy
     networks:
@@ -222,30 +234,30 @@ services:
     networks:
       - clip-net
 
-  monitoring-service:
-    build:
-      context: ./monitoring-service
-    container_name: monitoring-service
-    env_file:
-      - .env
-    environment:
-      DB_HOST: monitoring-mysql-db
-      RABBITMQ_HOST: rabbitmq-broker
-      REDIS_HOST: monitoring-redis-cache
-      DB_PASSWORD: ${DB_ROOT_PASSWORD}
-      SECRET_KEY: ${SECRET_KEY}
-      DB_NAME: monitoring_db
-    volumes:
-      - shared_images:/app/shared_images
-    depends_on:
-      monitoring-mysql-db:
-        condition: service_healthy
-      monitoring-redis-cache:
-        condition: service_started
-      rabbitmq-broker:
-        condition: service_healthy
-    networks:
-      - clip-net
+  # monitoring-service:
+  #   build:
+  #     context: ./monitoring-service
+  #   container_name: monitoring-service
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     DB_HOST: monitoring-mysql-db
+  #     RABBITMQ_HOST: rabbitmq-broker
+  #     REDIS_HOST: monitoring-redis-cache
+  #     DB_PASSWORD: ${DB_ROOT_PASSWORD}
+  #     SECRET_KEY: ${SECRET_KEY}
+  #     DB_NAME: monitoring_db
+  #   volumes:
+  #     - shared_images:/app/shared_images
+  #   depends_on:
+  #     monitoring-mysql-db:
+  #       condition: service_healthy
+  #     monitoring-redis-cache:
+  #       condition: service_started
+  #     rabbitmq-broker:
+  #       condition: service_healthy
+  #   networks:
+  #     - clip-net
   notification-service:
     build:
       context: ./notification-service
@@ -269,7 +281,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "8576:80"
+      - '8576:80'
     networks:
       - clip-net
     restart: always
@@ -279,7 +291,7 @@ services:
       - notification-service
       - embedding-service
       - tagging-service
-      - monitoring-service
+      # - monitoring-service
 
 volumes:
   login_mysql_data:

@@ -86,8 +86,16 @@ async def consume_events():
                         
                         if target_user_id:
                             logger.info(f"[MQ Received] Event: {data.get('event')} -> User: {target_user_id}")
-                            # WebSocket Manager에게 전달
-                            await manager.broadcast(target_user_id, json.dumps(data))
+                            # 태깅 결과 메시지라면 표준 포맷으로 브로드캐스트
+                            if data.get("event") == "tagging:completed":
+                                await manager.broadcast_tagging_result(
+                                    user_id=target_user_id,
+                                    data_id=str(data.get("data_id")),
+                                    tags=data.get("tags", [])
+                                )
+                            else:
+                                # 일반 메시지는 원본 그대로 텍스트로 전달
+                                await manager.broadcast(target_user_id, json.dumps(data))
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
     

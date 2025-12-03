@@ -33,4 +33,15 @@ class ConnectionManager:
                 except Exception:
                     self.disconnect(user_id, connection)
 
+    async def broadcast_tagging_result(self, user_id: str, data_id: str, tags: List[dict]):
+        """태깅 결과를 특정 사용자에게 JSON으로 전송"""
+        import json
+        message = json.dumps({
+            "type": "tagging_result",
+            "data_id": data_id,
+            "user_id": user_id,
+            "tags": tags
+        })
+        await self.broadcast(user_id, message)
+
 manager = ConnectionManager()
