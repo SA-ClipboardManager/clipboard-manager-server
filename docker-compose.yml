@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   adminer:
     image: adminer
@@ -163,7 +161,7 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       crud-mysql-db:
         condition: service_healthy
@@ -189,7 +187,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: tagging_db
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       tagging-mysql-db:
         condition: service_healthy
@@ -208,12 +206,14 @@ services:
       - .env
     environment:
       RABBITMQ_HOST: rabbitmq-broker
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq-broker:5672/
+      RABBITMQ_IMAGE_QUEUE: embedding_image_queue
       REDIS_HOST: embedding-redis-cache
       # PINECONE_API_KEY: ${PINECONE_API_KEY}
       DB_PASSWORD: ${DB_ROOT_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       embedding-redis-cache:
         condition: service_started
@@ -257,7 +257,7 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       rabbitmq-broker:
         condition: service_healthy
