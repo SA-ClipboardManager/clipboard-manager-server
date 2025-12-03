@@ -37,7 +37,6 @@ async def startup_event():
         mean=(0.485, 0.456, 0.406),
         std=(0.229, 0.224, 0.225),
         apply_softmax=True,
-        default_top_k=settings.TOP_K,
     )
 
 @app.on_event("shutdown")

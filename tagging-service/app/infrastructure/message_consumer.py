@@ -105,19 +105,22 @@ class RabbitMQConsumer(IMessageConsumer):
                 # 메시지 파싱
                 body = json.loads(message.body.decode())
                 logger.info(f"Received message: {body.get('event')}")
+                logger.info(f"Message body: {body}")
                 
-                # TaggingTask 생성
-                data = body.get("data", {})
+                # crud-service가 { event, data: {...} } 형태로 보낼 수도 있음
+                payload = body.get("data") or body
+                
+                # TaggingTask 생성 (payload에서 직접 추출)
                 task = TaggingTask(
-                    data_id=data.get("data_id"),
-                    user_id=data.get("user_id"),
-                    file_path=data.get("file_path"),
-                    thumbnail_path=data.get("thumbnail_path"),
-                    created_at=data.get("created_at"),
-                    format=data.get("format"),
-                    width=data.get("width"),
-                    height=data.get("height"),
-                    file_size=data.get("file_size")
+                    data_id=payload.get("data_id"),
+                    user_id=payload.get("user_id") or body.get("user_id"),
+                    file_path=payload.get("file_path"),
+                    thumbnail_path=payload.get("thumbnail_path"),
+                    created_at=payload.get("created_at"),
+                    format=payload.get("format"),
+                    width=payload.get("width"),
+                    height=payload.get("height"),
+                    file_size=payload.get("file_size")
                 )
                 
                 # 메시지 처리

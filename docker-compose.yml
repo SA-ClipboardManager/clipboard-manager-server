@@ -49,7 +49,7 @@ services:
       MYSQL_DATABASE: tagging_db
       TZ: Asia/Seoul
     ports:
-      - "3308:3306"
+      - '3308:3306'
     volumes:
       - tagging_mysql_data:/var/lib/mysql
     networks:
@@ -199,7 +199,7 @@ services:
       # 모델 설정
       MODEL_PATH: /app/models/mobilenetv3_trained.onnx
       LABELS_PATH: /app/models/Classes.py
-      TOP_K: '5'
+      TAGGING_MIN_SCORE: '0.5'
     volumes:
       - ./my_local_images:/app/shared_images
     depends_on:

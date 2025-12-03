@@ -63,11 +63,11 @@ class ClipboardService:
             
             # 이미지 메타 정보가 있으면 URL 변환해서 포함
             if img_meta:
-                payload["file_path"] = self._convert_path_to_url(img_meta.get("file_path"))
-                payload["thumbnail_path"] = self._convert_path_to_url(img_meta.get("thumbnail_path"))
-                payload["width"] = img_meta.get("width")
-                payload["height"] = img_meta.get("height")
-                payload["file_size"] = img_meta.get("file_size")
+                payload["file_path"] = self._convert_path_to_url(img_meta.file_path)
+                payload["thumbnail_path"] = self._convert_path_to_url(img_meta.thumbnail_path)
+                payload["width"] = img_meta.width
+                payload["height"] = img_meta.height
+                payload["file_size"] = img_meta.file_size
             
             await self.message_broker.publish_event("crud:imgSave_success", payload)
         

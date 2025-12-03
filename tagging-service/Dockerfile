@@ -19,7 +19,7 @@ COPY models/Classes.py /app/models/Classes.py
 # 기본 환경변수(컴포즈에서 override 가능)
 ENV MODEL_PATH=/app/models/mobilenetv3_trained.onnx \
     LABELS_PATH=/app/models/Classes.py \
-    TOP_K=5
+    TAGGING_MIN_SCORE='0.5'
 
 EXPOSE 8000
 
