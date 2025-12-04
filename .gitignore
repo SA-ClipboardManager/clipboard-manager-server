@@ -1,3 +1,5 @@
+# Ignore local images used by services
+my_local_images/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
