@@ -10,6 +10,7 @@ import com.ccd.monitoring_service.repository.SystemLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,32 +20,43 @@ import org.springframework.transaction.annotation.Transactional;
 public class MessageConsumer {
     private final SystemLogRepository systemLogRepository;
     private final ErrorLogRepository errorLogRepository;
+    private final RabbitTemplate rabbitTemplate;
 
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_NAME)
+    @RabbitListener(queues = RabbitMQConfig.QUEUE_MAIN)
     @Transactional
     public void receiveMessage(LogMessageDto dto) {
-        log.info("RabbitMQ 수신 [{}]: {}", dto.getCorrelationId(), dto);
+           log.info("수신 ID: {}", dto.getCorrelationId());
 
         try {
-            if (dto.getLogType() == LogType.SYSTEM) {
-                saveSystemLog(dto);
-            } else if (dto.getLogType() == LogType.ERROR) {
-                saveErrorLog(dto);
-            } else {
-                log.warn("알 수 없는 로그 타입입니다: {}", dto.getLogType());
-            }
+            // =========================
+            // ★ 비즈니스 로직 수행 구역 ★
+           saveLogToDatabase(dto);
+
+           if(dto.getLogType() == LogType.ERROR){
+               log.info("Service Failed. Send to Retry Queue");
+               rabbitTemplate.convertAndSend(
+                       RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE,
+                       RabbitMQConfig.ROUTING_KEY_FAIL,
+                       dto
+               );
+           }
+            // =========================
+
         } catch (Exception e) {
-            log.error("로그 저장 실패! correlationId: {}", dto.getCorrelationId(), e);
-            // 여기서 throw e;를 해야 RabbitMQ가 실패 처리(Nack) 후 재시도/DLQ 이동을 함
-            throw e;
+            log.error("처리 실패! 재시도 불가! 원인: {}", e.getMessage());
+            }
         }
 
+    private void saveLogToDatabase(LogMessageDto dto) {
+        if (dto.getLogType() == LogType.SYSTEM) {
+            saveSystemLog(dto);
 
-        /* TODO Business logic
-            insert to db OR
-            on failed retry OR
-            cancel for all
-         */
+        } else if (dto.getLogType() == LogType.ERROR) {
+            saveErrorLog(dto);
+
+        } else {
+            log.warn("알 수 없는 로그 타입: {}", dto.getLogType());
+        }
     }
 
     private void saveErrorLog(LogMessageDto dto) {
@@ -56,6 +68,7 @@ public class MessageConsumer {
                 dto.getExceptionType()
         );
         errorLogRepository.save(entity);
+        log.info("ErrorLog 저장 완료");
     }
 
     private void saveSystemLog(LogMessageDto dto) {
@@ -66,5 +79,6 @@ public class MessageConsumer {
                 dto.getLogLevel()
         );
         systemLogRepository.save(entity);
+        log.info("SystemLog 저장 완료");
     }
 }
