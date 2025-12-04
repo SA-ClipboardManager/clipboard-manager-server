@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  tagging-mysql-db:
+    image: mysql:8.0
+    container_name: tagging-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: tagging_db
+      TZ: Asia/Seoul
+    volumes:
+      - tagging_mysql_data:/var/lib/mysql
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  tagging-redis-cache:
+    image: redis:7.0-alpine
+    container_name: tagging-redis
+    networks:
+      - clip-net
+
+  tagging-service:
+    build:
+      context: ./tagging-service
+    container_name: tagging-service
+    env_file:
+      - .env
+    environment:
+      DB_HOST: tagging-mysql-db
+      DATABASE_URL: tagging-mysql-db/tagging_db
+      RABBITMQ_HOST: rabbitmq-broker
+      REDIS_HOST: tagging-redis-cache
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: tagging_db
+    volumes:
+      - ./my_local_images:/app/shared_images
+    depends_on:
+      tagging-mysql-db:
+        condition: service_healthy
+      tagging-redis-cache:
+        condition: service_started
+      rabbitmq-broker:
+        condition: service_healthy
+    networks:
+      - clip-net
+
+volumes:
+  tagging_mysql_data:
+
+networks:
+  clip-net:
+    driver: bridge
