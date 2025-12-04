@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  embedding-redis-cache:
+    image: redis:7.0-alpine
+    container_name: embedding-redis
+    networks:
+      - clip-net
+
+  embedding-service:
+    build:
+      context: ./embedding-service
+    container_name: embedding-service
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_HOST: rabbitmq-broker
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq-broker:5672/
+      RABBITMQ_IMAGE_QUEUE: embedding_image_queue
+      REDIS_HOST: embedding-redis-cache
+      # PINECONE_API_KEY: ${PINECONE_API_KEY}
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+    volumes:
+      - ./my_local_images:/app/shared_images
+    depends_on:
+      embedding-redis-cache:
+        condition: service_started
+      rabbitmq-broker:
+        condition: service_healthy
+    networks:
+      - clip-net
+
+networks:
+  clip-net:
+    driver: bridge
+    external: true

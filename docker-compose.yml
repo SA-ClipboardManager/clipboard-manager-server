@@ -1,107 +1,13 @@
+version: "3.8"
+
 services:
+  # ==================== 공유 인프라 ====================
   adminer:
     image: adminer
     container_name: clip-adminer
     restart: always
     ports:
       - "8081:8080"
-    networks:
-      - clip-net
-  login-mysql-db:
-    image: mysql:8.0
-    container_name: login-mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: login_db
-      TZ: Asia/Seoul
-    volumes:
-      - login_mysql_data:/var/lib/mysql
-    networks:
-      - clip-net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 10s
-      retries: 5
-
-  crud-mysql-db:
-    image: mysql:8.0
-    container_name: crud-mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: crud_db
-      TZ: Asia/Seoul
-    volumes:
-      - crud_mysql_data:/var/lib/mysql
-    networks:
-      - clip-net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 10s
-      retries: 5
-
-  tagging-mysql-db:
-    image: mysql:8.0
-    container_name: tagging-mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: tagging_db
-      TZ: Asia/Seoul
-    volumes:
-      - tagging_mysql_data:/var/lib/mysql
-    networks:
-      - clip-net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 10s
-      retries: 5
-
-  monitoring-mysql-db:
-    image: mysql:8.0
-    container_name: monitoring-mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: monitoring_db
-      TZ: Asia/Seoul
-    volumes:
-      - monitoring_mysql_data:/var/lib/mysql
-    networks:
-      - clip-net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 10s
-      retries: 5
-
-  login-redis-cache:
-    image: redis:7.0-alpine
-    container_name: login-redis
-    networks:
-      - clip-net
-
-  crud-redis-cache:
-    image: redis:7.0-alpine
-    container_name: crud-redis
-    networks:
-      - clip-net
-
-  tagging-redis-cache:
-    image: redis:7.0-alpine
-    container_name: tagging-redis
-    networks:
-      - clip-net
-
-  embedding-redis-cache:
-    image: redis:7.0-alpine
-    container_name: embedding-redis
-    networks:
-      - clip-net
-
-  monitoring-redis-cache:
-    image: redis:7.0-alpine
-    container_name: monitoring-redis
     networks:
       - clip-net
 
@@ -120,6 +26,30 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ==================== Login 서비스 ====================
+  login-mysql-db:
+    image: mysql:8.0
+    container_name: login-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: login_db
+      TZ: Asia/Seoul
+    volumes:
+      - login_mysql_data:/var/lib/mysql
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  login-redis-cache:
+    image: redis:7.0-alpine
+    container_name: login-redis
+    networks:
+      - clip-net
 
   login-service:
     build:
@@ -143,6 +73,30 @@ services:
       - clip-net
     ports:
       - "9001:8000"
+
+  # ==================== CRUD 서비스 ====================
+  crud-mysql-db:
+    image: mysql:8.0
+    container_name: crud-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: crud_db
+      TZ: Asia/Seoul
+    volumes:
+      - crud_mysql_data:/var/lib/mysql
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  crud-redis-cache:
+    image: redis:7.0-alpine
+    container_name: crud-redis
+    networks:
+      - clip-net
 
   crud-service:
     build:
@@ -172,53 +126,27 @@ services:
     networks:
       - clip-net
 
-  tagging-service:
-    build:
-      context: ./tagging-service
-    container_name: tagging-service
-    env_file:
-      - .env
+  # ==================== Monitoring 서비스 ====================
+  monitoring-mysql-db:
+    image: mysql:8.0
+    container_name: monitoring-mysql
     environment:
-      DB_HOST: tagging-mysql-db
-      DATABASE_URL: tagging-mysql-db/tagging_db
-      RABBITMQ_HOST: rabbitmq-broker
-      REDIS_HOST: tagging-redis-cache
-      DB_PASSWORD: ${DB_ROOT_PASSWORD}
-      SECRET_KEY: ${SECRET_KEY}
-      DB_NAME: tagging_db
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: monitoring_db
+      TZ: Asia/Seoul
     volumes:
-      - ./my_local_images:/app/shared_images
-    depends_on:
-      tagging-mysql-db:
-        condition: service_healthy
-      tagging-redis-cache:
-        condition: service_started
-      rabbitmq-broker:
-        condition: service_healthy
+      - monitoring_mysql_data:/var/lib/mysql
     networks:
       - clip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
 
-  embedding-service:
-    build:
-      context: ./embedding-service
-    container_name: embedding-service
-    env_file:
-      - .env
-    environment:
-      RABBITMQ_HOST: rabbitmq-broker
-      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq-broker:5672/
-      RABBITMQ_IMAGE_QUEUE: embedding_image_queue
-      REDIS_HOST: embedding-redis-cache
-      # PINECONE_API_KEY: ${PINECONE_API_KEY}
-      DB_PASSWORD: ${DB_ROOT_PASSWORD}
-      SECRET_KEY: ${SECRET_KEY}
-    volumes:
-      - ./my_local_images:/app/shared_images
-    depends_on:
-      embedding-redis-cache:
-        condition: service_started
-      rabbitmq-broker:
-        condition: service_healthy
+  monitoring-redis-cache:
+    image: redis:7.0-alpine
+    container_name: monitoring-redis
     networks:
       - clip-net
 
@@ -236,7 +164,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       DB_NAME: monitoring_db
     volumes:
-      - shared_images:/app/shared_images
+      - ./my_local_images:/app/shared_images
     depends_on:
       monitoring-mysql-db:
         condition: service_healthy
@@ -246,6 +174,8 @@ services:
         condition: service_healthy
     networks:
       - clip-net
+
+  # ==================== Notification 서비스 ====================
   notification-service:
     build:
       context: ./notification-service
@@ -256,6 +186,7 @@ services:
       RABBITMQ_HOST: rabbitmq-broker
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
+      SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ./my_local_images:/app/shared_images
     depends_on:
@@ -263,6 +194,8 @@ services:
         condition: service_healthy
     networks:
       - clip-net
+
+  # ==================== API Gateway ====================
   nginx-gateway:
     image: nginx:stable-alpine
     container_name: clip-api-gateway
@@ -277,17 +210,12 @@ services:
       - login-service
       - crud-service
       - notification-service
-      - embedding-service
-      - tagging-service
       - monitoring-service
 
 volumes:
   login_mysql_data:
   crud_mysql_data:
-  tagging_mysql_data:
   monitoring_mysql_data:
-  shared_images:
-    driver: local
 
 networks:
   clip-net:
