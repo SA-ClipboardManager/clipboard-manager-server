@@ -65,6 +65,8 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: monitoring_db
       TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
     volumes:
       - monitoring_mysql_data:/var/lib/mysql
     networks:
@@ -113,6 +115,7 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     ports:
       - "15672:15672"
+      - "5672:5672"
     networks:
       - clip-net
     healthcheck:
