@@ -83,7 +83,7 @@ async def consume_events():
         # 4. 두 exchange 모두 바인딩
         await queue.bind(notifications_exchange)  # notifications exchange (fanout)
         await queue.bind(crud_exchange, routing_key="crud.#")  # crud_events exchange (모든 crud:* 이벤트)
-        await queue.bind(crud_exchange, routing_key="tagging:completed")  # tagging:completed 이벤트
+        await queue.bind(crud_exchange, routing_key="service.tagging.completed")  # service.tagging.completed 이벤트
 
         logger.info(" [*] Waiting for notification events (notifications + crud_events + tagging)...")
 
@@ -100,8 +100,8 @@ async def consume_events():
                             logger.info(f"[MQ Received] Event: {event_type} -> User: {target_user_id}")
                             
                             # WebSocket으로 전달할 메시지 구성
-                            # tagging:completed 이벤트의 경우 type을 tagging_result로 변환
-                            if event_type == "tagging:completed":
+                            # service.tagging.completed 이벤트의 경우 type을 tagging_result로 변환
+                            if event_type == "service.tagging.completed":
                                 ws_message = {
                                     "type": "tagging_result",
                                     "event": event_type,
