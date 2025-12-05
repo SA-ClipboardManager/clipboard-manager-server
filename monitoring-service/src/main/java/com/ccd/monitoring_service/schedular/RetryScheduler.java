@@ -31,20 +31,23 @@ public class RetryScheduler {
         LocalDateTime now = LocalDateTime.now();
 
         List<RetryEntity> targets =
-                retryRepository.findByNextAttemptAtBeforeAndStatus(now, RetryStatus.PENDING);
+                retryRepository.findMessageToBeSent(now, RetryStatus.FAIL);
         if (targets.isEmpty()) {
             return;
         }
-        for (RetryEntity retryEntity : targets) {
+        for (RetryEntity target : targets) {
+            log.info("Retry Correlation ID: [{}], Service: [{}]", target.getCorrelationId(), target.getServiceName());
             try {
-                LogMessageDto dto = objectMapper.readValue(retryEntity.getMessageJson(), LogMessageDto.class);
+                LogMessageDto dto = objectMapper.readValue(target.getMessageJson(), LogMessageDto.class);
+                target.markAsPending();
                 rabbitTemplate.convertAndSend(
                         RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE,
-                        retryEntity.getServiceName() + ".do.retry", dto
+                        target.getServiceName() + ".do.retry",
+                        dto
                 );
-
+                log.info("송신 | send to Exchange: [{}]",RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE);
             } catch (Exception e) {
-                log.error("재발송 중 에러 발생 (심각). 일단 다음 텀에 다시 시도.", e);
+                log.error("재발송 중 에러 발생 (심각)", e);
                 // 재시도 횟수가 너무 많으면(예: 10회) delete 하거나 별도 알림 보내는 로직 추가 필요 OR 보상 트랜잭션
             }
         }
