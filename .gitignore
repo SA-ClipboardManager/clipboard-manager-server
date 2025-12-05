@@ -205,3 +205,21 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Image files (uploaded content)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+*.svg
+*.ico
+*.tiff
+*.tif
+
+# Image upload directories
+my_local_images/
+uploads/
+original/
+thumbnail/
