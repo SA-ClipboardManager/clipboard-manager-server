@@ -11,7 +11,6 @@ RUN gradle bootJar --no-daemon
 # 2) Runtime Stage: Java 21 JRE 이미지
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-
 # builder에서 생성된 JAR 복사
 COPY --from=builder /app/build/libs/*.jar app.jar
 
