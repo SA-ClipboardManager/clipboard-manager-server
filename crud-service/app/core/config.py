@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     
     # Server
-    server_url: str = "http://localhost:8576"
+    server_url: str = Field(default="http://localhost:8576", alias="SERVER_URL")
     
     # Storage
     shared_image_dir: str = "/app/shared_images"
