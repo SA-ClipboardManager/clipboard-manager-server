@@ -92,12 +92,25 @@ async def consume_events():
                 async with message.process():
                     try:
                         data = json.loads(message.body.decode())
-                        target_user_id = data.get("user_id")
+                        event_type = data.get("event")
+                        target_user_id = data.get("user_id") or data.get("data", {}).get("user_id")
                         
                         if target_user_id:
-                            logger.info(f"[MQ Received] Event: {data.get('event')} -> User: {target_user_id}")
+                            logger.info(f"[MQ Received] Event: {event_type} -> User: {target_user_id}")
+                            
+                            # WebSocket으로 전달할 메시지 구성
+                            # tagging:completed 이벤트의 경우 type을 tagging_result로 변환
+                            ws_message = {
+                                "type": "tagging_result" if event_type == "tagging:completed" else event_type,
+                                "event": event_type,
+                                **data.get("data", {})
+                            }
+                            
                             # WebSocket Manager에게 전달
-                            await manager.broadcast(target_user_id, json.dumps(data))
+                            await manager.broadcast(target_user_id, json.dumps(ws_message))
+                        else:
+                            logger.warning(f"[MQ Received] No user_id in event: {event_type}")
+                            
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
                         
