@@ -153,7 +153,7 @@ services:
       context: ./monitoring-service
     container_name: monitoring-service
     env_file:
-      - .env
+      - monitoring-service/.env
     environment:
       DB_HOST: monitoring-mysql-db
       RABBITMQ_HOST: rabbitmq-broker
