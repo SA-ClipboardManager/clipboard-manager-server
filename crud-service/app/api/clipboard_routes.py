@@ -39,6 +39,16 @@ async def handle_sync_events(
     except Exception as e:
         await conn.rollback()
         logger.error(f"Sync failed: {e}", exc_info=True)
+        
+        # 모니터링 에러 로그 발행
+        from ..main import monitoring_publisher
+        correlation_id = events[0].correlation_id if events else "unknown"
+        await monitoring_publisher.publish_error_log(
+            correlation_id=correlation_id,
+            message=f"Sync failed for user {user_id}",
+            exception=e
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
@@ -66,6 +76,15 @@ async def create_item(
     except Exception as e:
         await conn.rollback()
         logger.error(f"Create item failed: {e}", exc_info=True)
+        
+        # 모니터링 에러 로그 발행
+        from ..main import monitoring_publisher
+        await monitoring_publisher.publish_error_log(
+            correlation_id=item.id,
+            message=f"Create item failed for user {user_id}",
+            exception=e
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create item"

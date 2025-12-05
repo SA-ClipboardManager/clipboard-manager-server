@@ -17,6 +17,7 @@ from fastapi_limiter.depends import RateLimiter
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings
 from redis.asyncio import Redis
+from infrastructure.monitoring_publisher import MonitoringPublisher
 
 # --------------------------------------------------------------------------
 # 1. 설정 및 로깅
@@ -24,6 +25,9 @@ from redis.asyncio import Redis
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("login-service")
+
+# 모니터링 퍼블리셔 인스턴스 (나중에 RabbitMQ 채널 설정)
+monitoring_publisher = None
 
 class Settings(BaseSettings):
     # DB 설정 (Docker Compose 서비스명 사용)
@@ -135,6 +139,7 @@ async def initialize_database():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global monitoring_publisher
     try:
         # DB 연결 풀 초기화 (재시도 로직 포함)
         app_state.db_pool = await create_db_pool()
@@ -145,6 +150,19 @@ async def lifespan(app: FastAPI):
         
         # DB 테이블 초기화
         await initialize_database()
+        
+        # RabbitMQ 및 모니터링 퍼블리셔 초기화
+        try:
+            import aio_pika
+            rabbitmq_url = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq-broker/")
+            connection = await aio_pika.connect_robust(rabbitmq_url, reconnect_interval=5)
+            channel = await connection.channel()
+            
+            monitoring_publisher = MonitoringPublisher("login-service")
+            await monitoring_publisher.connect(channel)
+            logger.info("RabbitMQ connected for monitoring")
+        except Exception as e:
+            logger.warning(f"RabbitMQ connection failed: {e}. Monitoring disabled.")
         
         logger.info("Login Service Started")
         yield
@@ -248,6 +266,14 @@ async def signup(user: UserSignupRequest, db=Depends(get_db)):
     except Exception as e:
         await conn.rollback()
         logger.error("Signup failed", exc_info=e)
+        
+        # 모니터링 에러 로그 발행
+        if monitoring_publisher:
+            await monitoring_publisher.publish_error_log(
+                correlation_id=f"signup-{user.user_id}",
+                message=f"Signup failed for user {user.user_id}",
+                exception=e
+            )
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="회원가입 처리 중 오류가 발생했습니다.")
 
 @app.post("/api/v1/auth/login", dependencies=[Depends(RateLimiter(times=5, minutes=1))])

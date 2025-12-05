@@ -15,8 +15,12 @@ from .core.logging import logger
 from .infrastructure.database import db_manager
 from .infrastructure.message_broker import message_broker
 from .infrastructure.redis_client import redis_manager
+from .infrastructure.monitoring_publisher import MonitoringPublisher
 from .api.clipboard_routes import router as clipboard_router
 from .api.image_routes import router as image_router
+
+# 모니터링 퍼블리셔 인스턴스
+monitoring_publisher = MonitoringPublisher(message_broker, "crud-service")
 
 
 @asynccontextmanager

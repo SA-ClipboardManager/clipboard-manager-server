@@ -9,10 +9,14 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import aio_pika
 import jwt
 from ws_manager import manager
+from monitoring_publisher import MonitoringPublisher
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("notification-service")
+
+# 모니터링 퍼블리셔 인스턴스
+monitoring_publisher = None
 
 # 환경 변수
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq-broker")
@@ -38,6 +42,7 @@ def verify_token(token: str) -> str:
 
 
 async def consume_events():
+    global monitoring_publisher
     url=f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}/"
     connection = None
     try:
@@ -60,6 +65,11 @@ async def consume_events():
             return
 
         channel = await connection.channel()
+        
+        # 모니터링 퍼블리셔 초기화
+        monitoring_publisher = MonitoringPublisher("notification-service")
+        await monitoring_publisher.connect(channel)
+        logger.info("MonitoringPublisher initialized")
 
         # 2-1. Fanout Exchange 선언 (기존 notifications)
         notifications_exchange = await channel.declare_exchange("notifications", aio_pika.ExchangeType.FANOUT)
@@ -90,6 +100,14 @@ async def consume_events():
                             await manager.broadcast(target_user_id, json.dumps(data))
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
+                        
+                        # 모니터링 에러 로그 발행
+                        if monitoring_publisher:
+                            await monitoring_publisher.publish_error_log(
+                                correlation_id=data.get("correlation_id", "unknown"),
+                                message=f"Failed to process notification message",
+                                exception=e
+                            )
     
     except asyncio.CancelledError:
         logger.info("Consumer task cancelled.")
