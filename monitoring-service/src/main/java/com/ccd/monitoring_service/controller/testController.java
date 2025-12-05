@@ -1,4 +1,4 @@
-package com.ccd.monitoring_service;
+package com.ccd.monitoring_service.controller;
 
 import com.ccd.monitoring_service.dto.LogMessageDto;
 import com.ccd.monitoring_service.dto.LogType;
@@ -30,8 +30,8 @@ public class testController {
                 .build();
 
         rabbitTemplate.convertAndSend(
-                RabbitMQConfig.EXCHANGE_NAME,
-                RabbitMQConfig.ROUTING_KEY,
+                RabbitMQConfig.MONITORING_MAIN_EXCHANGE,
+                RabbitMQConfig.ROUTING_KEY_MAIN_PATTERN,
                 dto
         );
 
@@ -54,8 +54,8 @@ public class testController {
                 .build();
 
         rabbitTemplate.convertAndSend(
-                RabbitMQConfig.EXCHANGE_NAME,
-                RabbitMQConfig.ROUTING_KEY,
+                RabbitMQConfig.MONITORING_MAIN_EXCHANGE,
+                RabbitMQConfig.ROUTING_KEY_MAIN_PATTERN,
                 dto
         );
 

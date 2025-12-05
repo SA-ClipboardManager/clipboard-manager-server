@@ -3,6 +3,7 @@ package com.ccd.monitoring_service.repository;
 import com.ccd.monitoring_service.entity.RetryEntity;
 import com.ccd.monitoring_service.entity.RetryStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -12,5 +13,6 @@ public interface RetryRepository extends JpaRepository<RetryEntity, Long> {
 
     boolean existsByCorrelationId(String correlationId);
 
-    List<RetryEntity> findByNextAttemptAtBeforeAndStatus(LocalDateTime nextAttemptAtBefore, RetryStatus status);
+   @Query("SELECT r FROM RetryEntity r WHERE r.status = :retryStatus AND r.nextAttemptAt < :now")
+    List<RetryEntity> findMessageToBeSent(LocalDateTime now, RetryStatus retryStatus);
 }
