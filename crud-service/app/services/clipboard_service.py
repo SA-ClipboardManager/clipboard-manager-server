@@ -49,7 +49,7 @@ class ClipboardService:
         if item_create.type == "txt":
             payload = item_create.model_dump()
             payload["user_id"] = user_id
-            await self.message_broker.publish_event("crud:txtSave_success", payload)
+            await self.message_broker.publish_event("crud.item.saved.txt", payload)
         elif item_create.type == "img":
             # 이미지 메타데이터 조회
             img_meta = await self.image_repo.get_by_data_id(item_create.id)
@@ -69,7 +69,7 @@ class ClipboardService:
                 payload["height"] = img_meta.get("height")
                 payload["file_size"] = img_meta.get("file_size")
             
-            await self.message_broker.publish_event("crud:imgSave_success", payload)
+            await self.message_broker.publish_event("crud.item.saved.img", payload)
         
         return item_create
     
@@ -96,7 +96,7 @@ class ClipboardService:
                         "created_at": event.args.get("created_at"),
                         "correlation_id": event.correlation_id
                     }
-                    await self.message_broker.publish_event("crud:txtSave_success", event_payload)
+                    await self.message_broker.publish_event("crud.item.saved.txt", event_payload)
                     
                 elif event.args.get("type") == "img":
                     # 이미지 메타데이터 조회
@@ -118,11 +118,11 @@ class ClipboardService:
                         event_payload["height"] = img_meta.get("height")
                         event_payload["file_size"] = img_meta.get("file_size")
                     
-                    await self.message_broker.publish_event("crud:imgSave_success", event_payload)
+                    await self.message_broker.publish_event("crud.item.saved.img", event_payload)
                 
                 # 태그 이벤트 발행
                 if "tags" in event.args and event.args["tags"]:
-                    await self.message_broker.publish_event("clip_synced_tags", {
+                    await self.message_broker.publish_event("crud.item.tags.synced", {
                         "data_id": event.args.get("id"),
                         "user_id": user_id,
                         "tags": event.args.get("tags"),
@@ -131,7 +131,7 @@ class ClipboardService:
             
             elif event.operation == "DELETE":
                 await self.clipboard_repo.delete(event.data_id, user_id)
-                await self.message_broker.publish_event("data_deleted", {
+                await self.message_broker.publish_event("crud.item.deleted", {
                     "data_id": event.data_id,
                     "user_id": user_id,
                     "correlation_id": event.correlation_id
@@ -160,7 +160,7 @@ class ClipboardService:
         await self.clipboard_repo.delete(item_id, user_id)
         
         # 이벤트 발행
-        await self.message_broker.publish_event("data_deleted", {
+        await self.message_broker.publish_event("crud.item.deleted", {
             "data_id": item_id,
             "user_id": user_id,
             "type": item["type"]

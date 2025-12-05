@@ -72,7 +72,7 @@ async def consume_events():
         
         # 4. 두 exchange 모두 바인딩
         await queue.bind(notifications_exchange)  # notifications exchange (fanout)
-        await queue.bind(crud_exchange, routing_key="crud.*")  # crud_events exchange (모든 crud:* 이벤트)
+        await queue.bind(crud_exchange, routing_key="crud.#")  # crud_events exchange (모든 crud:* 이벤트)
 
         logger.info(" [*] Waiting for notification events (notifications + crud_events)...")
 
