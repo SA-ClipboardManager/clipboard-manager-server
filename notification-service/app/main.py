@@ -74,18 +74,17 @@ async def consume_events():
         # 2-1. Fanout Exchange 선언 (기존 notifications)
         notifications_exchange = await channel.declare_exchange("notifications", aio_pika.ExchangeType.FANOUT)
         
-        # 2-2. Topic Exchange 선언 (CRUD 이벤트)
-        crud_exchange = await channel.declare_exchange("crud_events", aio_pika.ExchangeType.TOPIC, durable=True)
+        # 2-2. Topic Exchange 선언 (main.exchange - monitoring-service 규격)
+        main_exchange = await channel.declare_exchange("main.exchange", aio_pika.ExchangeType.TOPIC, durable=True)
 
         # 3. 임시 큐 생성 (Exclusive=True: 이 서비스가 꺼지면 큐도 삭제됨)
         queue = await channel.declare_queue(exclusive=True)
         
-        # 4. 두 exchange 모두 바인딩
+        # 4. Exchange 바인딩
         await queue.bind(notifications_exchange)  # notifications exchange (fanout)
-        await queue.bind(crud_exchange, routing_key="crud.#")  # crud_events exchange (모든 crud:* 이벤트)
-        await queue.bind(crud_exchange, routing_key="service.tagging.completed")  # service.tagging.completed 이벤트
+        await queue.bind(main_exchange, routing_key="service.#")  # main.exchange의 모든 service.* 이벤트
 
-        logger.info(" [*] Waiting for notification events (notifications + crud_events + tagging)...")
+        logger.info(" [*] Waiting for notification events (notifications + main.exchange)...")
 
         # 5. 메시지 수신 루프
         async with queue.iterator() as queue_iter:
