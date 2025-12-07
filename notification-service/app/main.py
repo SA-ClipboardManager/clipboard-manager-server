@@ -74,17 +74,17 @@ async def consume_events():
         # 2-1. Fanout Exchange 선언 (기존 notifications)
         notifications_exchange = await channel.declare_exchange("notifications", aio_pika.ExchangeType.FANOUT)
         
-        # 2-2. Topic Exchange 선언 (CRUD 이벤트)
-        crud_exchange = await channel.declare_exchange("crud_events", aio_pika.ExchangeType.TOPIC, durable=True)
+        # 2-2. Topic Exchange 선언 (main.exchange - monitoring-service 규격)
+        main_exchange = await channel.declare_exchange("main.exchange", aio_pika.ExchangeType.TOPIC, durable=True)
 
         # 3. 임시 큐 생성 (Exclusive=True: 이 서비스가 꺼지면 큐도 삭제됨)
         queue = await channel.declare_queue(exclusive=True)
         
-        # 4. 두 exchange 모두 바인딩
+        # 4. Exchange 바인딩
         await queue.bind(notifications_exchange)  # notifications exchange (fanout)
-        await queue.bind(crud_exchange, routing_key="crud.#")  # crud_events exchange (모든 crud:* 이벤트)
+        await queue.bind(main_exchange, routing_key="service.#")  # main.exchange의 모든 service.* 이벤트
 
-        logger.info(" [*] Waiting for notification events (notifications + crud_events)...")
+        logger.info(" [*] Waiting for notification events (notifications + main.exchange)...")
 
         # 5. 메시지 수신 루프
         async with queue.iterator() as queue_iter:
@@ -92,12 +92,33 @@ async def consume_events():
                 async with message.process():
                     try:
                         data = json.loads(message.body.decode())
-                        target_user_id = data.get("user_id")
+                        event_type = data.get("event")
+                        target_user_id = data.get("user_id") or data.get("data", {}).get("user_id")
                         
                         if target_user_id:
-                            logger.info(f"[MQ Received] Event: {data.get('event')} -> User: {target_user_id}")
+                            logger.info(f"[MQ Received] Event: {event_type} -> User: {target_user_id}")
+                            
+                            # WebSocket으로 전달할 메시지 구성
+                            # service.tagging.completed 이벤트의 경우 type을 tagging_result로 변환
+                            if event_type == "service.tagging.completed":
+                                ws_message = {
+                                    "type": "tagging_result",
+                                    "event": event_type,
+                                    "user_id": target_user_id,
+                                    **data.get("data", {})
+                                }
+                            else:
+                                ws_message = {
+                                    "type": event_type,
+                                    "event": event_type,
+                                    **data.get("data", {})
+                                }
+                            
                             # WebSocket Manager에게 전달
-                            await manager.broadcast(target_user_id, json.dumps(data))
+                            await manager.broadcast(target_user_id, json.dumps(ws_message))
+                        else:
+                            logger.warning(f"[MQ Received] No user_id in event: {event_type}")
+                            
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
                         

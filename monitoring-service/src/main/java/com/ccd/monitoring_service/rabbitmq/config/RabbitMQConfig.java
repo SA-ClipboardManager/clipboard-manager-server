@@ -17,21 +17,22 @@ public class RabbitMQConfig {
     public static final String MONITORING_MAIN_EXCHANGE = "main.exchange";
     public static final String MONITORING_RECOVERY_EXCHANGE ="recovery.exchange";
     // --- 1. Queue 이름 정의 ---
-    public static final String QUEUE_MAIN = "monitoring.queue";          // fail로그 수집용 메인 큐
+    public static final String QUEUE_MAIN = "monitoring.queue";          // 로그 수집용 메인 큐
     public static final String QUEUE_RETRY = "monitoring.retry.queue"; // 재시도용 큐
 
     // --- 2. Routing Key 정의 (흐름순) ---
-    // (1) 외부에서 로그가 들어올 때: "embedding.success", "crd.error" 등
+    // (1) 외부에서 로그가 들어올 때: "service.embedding.success", "service.crud.error" 등
     public static final String ROUTING_KEY_MAIN_PATTERN = "service.#";
 
     // (2) MessageConsumer -> FailureHandler로 보낼 때 ("monitoring.fail_occur")
     public static final String ROUTING_KEY_FAIL = "monitoring.fail_occur";
 
-    // (4) 외부 서비스에서 재시도하고 결과를 모니터링 서비스로 보낼 때
+    // (4) 외부 서비스에서 "재시도하고" 결과를 모니터링 서비스로 보낼 때
     public static final String ROUTING_KEY_RETRY = "*.retry.#";
     /* 참고
+     * monitoring -> 특정 서비스
      * 어떤 서비스로 재시도 요청 보낼 떄 routing key
-     *  *.[serviceName].do.retry   ex)crud.do.retry
+     *  [serviceName].do.retry   ex)crud.do.retry
      * */
 
     // --- 3. Queue Bean 생성 ---
@@ -64,13 +65,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(mainQueue).to(mainExchange).with(ROUTING_KEY_MAIN_PATTERN);
     }
 
-    // B. 재시도 수행 큐 연결: ___service가 모니터링 서비스로 이벤트 보내면 Retry Queue로
+    // B. 재시도 수행 큐: 재시도중인 service가 모니터링 서비스로 이벤트 보내면 Retry Queue로
     @Bean
     public Binding bindingRetry(Queue retryQueue, TopicExchange recoveryExchange) {
         return BindingBuilder.bind(retryQueue).to(recoveryExchange).with(ROUTING_KEY_RETRY);
     }
 
-    // C. 새로운 실패 수신용
+    // C. 재시도 수행 큐 연결: Main Queue -> Retry Queue. 에러가 표시된 메세지는 Retry Queue로
     @Bean
     public Binding bindingFail(Queue retryQueue, TopicExchange recoveryExchange) {
         return BindingBuilder.bind(retryQueue).to(recoveryExchange).with(ROUTING_KEY_FAIL);

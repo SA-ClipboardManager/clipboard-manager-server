@@ -33,12 +33,17 @@ public class MessageConsumer {
            saveLogToDatabase(dto);
 
            if(dto.getLogType() == LogType.ERROR){
-               log.info("Service Failed. Send to Retry Queue");
-               rabbitTemplate.convertAndSend(
-                       RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE,
-                       RabbitMQConfig.ROUTING_KEY_FAIL,
-                       dto
-               );
+               if(dto.getServiceName().equals("crud")){ //재시도 X
+                   log.info("[{}] service Failed. Compensate",  dto.getServiceName());
+               }else {
+
+                   log.info("Service Failed. Send to Retry Queue");
+                   rabbitTemplate.convertAndSend(
+                           RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE,
+                           RabbitMQConfig.ROUTING_KEY_FAIL,
+                           dto
+                   );
+               }
            }
             // =========================
 
