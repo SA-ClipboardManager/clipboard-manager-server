@@ -51,28 +51,18 @@ class MessageBroker:
         logger.info("RabbitMQ connection closed")
     
     async def publish_event(self, topic: str, data: Dict[str, Any]):
-        """이벤트 발행"""
+        """이벤트 발행 (main.exchange 사용)"""
         if not self.channel:
             logger.error("RabbitMQ channel not available")
             return
         
         try:
-            # 이벤트 타입에 따라 적절한 exchange 선택
-            if topic.startswith("crud:"):
-                # CRUD 이벤트는 topic exchange로 발행
-                exchange = await self.channel.declare_exchange(
-                    "crud_events",
-                    aio_pika.ExchangeType.TOPIC,
-                    durable=True
-                )
-                routing_key = topic
-            else:
-                # 기존 notifications는 fanout으로 유지
-                exchange = await self.channel.declare_exchange(
-                    "notifications",
-                    aio_pika.ExchangeType.FANOUT
-                )
-                routing_key = ""
+            # main.exchange 사용
+            exchange = await self.channel.declare_exchange(
+                "main.exchange",
+                aio_pika.ExchangeType.TOPIC,
+                durable=True
+            )
             
             # 메시지 생성
             message_body = {
@@ -87,8 +77,8 @@ class MessageBroker:
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
             )
             
-            # 메시지 발행
-            await exchange.publish(message, routing_key=routing_key)
+            # topic을 routing_key로 사용
+            await exchange.publish(message, routing_key=topic)
             logger.info(f"[MQ Sent] Event: {topic}, User: {data.get('user_id')}, Data: {data.get('data_id')}")
         
         except Exception as e:
