@@ -25,8 +25,6 @@ public class RetryEntity {
     @Column(nullable = false, length = 64)
     private String correlationId;
 
-    @Lob // 메시지 내용을 통째로 저장 (JSON 문자열 등)
-    private String messageJson;
 
     @Column(nullable = false)
     private String serviceName;
@@ -41,6 +39,8 @@ public class RetryEntity {
 
     private LocalDateTime nextAttemptAt;
 
+    @Column(columnDefinition = "LONGTEXT")
+    private String tagInfoJson;
 
     @CreatedDate
     private LocalDateTime createdAt; // 실패 발생 시간
@@ -48,9 +48,9 @@ public class RetryEntity {
     @LastModifiedDate
     private LocalDateTime updatedAt; // 처리 시간
 
-    public RetryEntity(String correlationId,String messageJson, String serviceName) {
+    public RetryEntity(String correlationId,String tagInfoJson, String serviceName) {
         this.correlationId = correlationId;
-        this.messageJson = messageJson;
+        this.tagInfoJson = tagInfoJson;
         this.serviceName = serviceName;
         this.retryCount = 0;
         this.nextAttemptAt = LocalDateTime.now();

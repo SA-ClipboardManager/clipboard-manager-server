@@ -1,6 +1,6 @@
 package com.ccd.monitoring_service.controller;
 
-import com.ccd.monitoring_service.dto.LogMessageDto;
+import com.ccd.monitoring_service.dto.EventDataDto;
 import com.ccd.monitoring_service.dto.LogType;
 import com.ccd.monitoring_service.rabbitmq.config.RabbitMQConfig;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +21,7 @@ public class testController {
     public String sendSystemLog() {
         String correlationId = UUID.randomUUID().toString();
 
-        LogMessageDto dto = LogMessageDto.builder()
+        EventDataDto dto = EventDataDto.builder()
                 .correlationId(correlationId)
                 .serviceName("payment-service") // 가상의 서비스 이름
                 .message("결제가 성공적으로 완료되었습니다.")
@@ -44,7 +44,7 @@ public class testController {
     public String sendErrorLog() {
         String correlationId = UUID.randomUUID().toString();
 
-        LogMessageDto dto = LogMessageDto.builder()
+        EventDataDto dto = EventDataDto.builder()
                 .correlationId(correlationId)
                 .serviceName("order-service")
                 .message("주문 처리 중 NullPointerException 발생")

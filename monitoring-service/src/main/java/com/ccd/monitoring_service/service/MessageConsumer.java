@@ -1,18 +1,22 @@
 package com.ccd.monitoring_service.service;
 
-import com.ccd.monitoring_service.dto.LogMessageDto;
+import com.ccd.monitoring_service.dto.EventDataDto;
 import com.ccd.monitoring_service.dto.LogType;
 import com.ccd.monitoring_service.entity.ErrorLogEntity;
 import com.ccd.monitoring_service.entity.SystemLogEntity;
 import com.ccd.monitoring_service.rabbitmq.config.RabbitMQConfig;
 import com.ccd.monitoring_service.repository.ErrorLogRepository;
 import com.ccd.monitoring_service.repository.SystemLogRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -24,7 +28,7 @@ public class MessageConsumer {
 
     @RabbitListener(queues = RabbitMQConfig.QUEUE_MAIN)
     @Transactional
-    public void receiveMessage(LogMessageDto dto) {
+    public void receiveMessage(EventDataDto dto) {
            log.info("수신 ID: {}", dto.getCorrelationId());
 
         try {
@@ -52,7 +56,7 @@ public class MessageConsumer {
             }
         }
 
-    private void saveLogToDatabase(LogMessageDto dto) {
+    private void saveLogToDatabase(EventDataDto dto) {
         if (dto.getLogType() == LogType.SYSTEM) {
             saveSystemLog(dto);
 
@@ -64,19 +68,36 @@ public class MessageConsumer {
         }
     }
 
-    private void saveErrorLog(LogMessageDto dto) {
-        ErrorLogEntity entity = new ErrorLogEntity(
-                dto.getCorrelationId(),
-                dto.getServiceName(),
-                dto.getMessage(),
-                dto.getStackTrace(),
-                dto.getExceptionType()
-        );
-        errorLogRepository.save(entity);
-        log.info("ErrorLog 저장 완료");
+    private void saveErrorLog(EventDataDto dto) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+
+            // 태깅 데이터만 뽑아 JSON으로 저장
+            Map<String, Object> taggingMap = new HashMap<>();
+            taggingMap.put("dataId", dto.getDataId());
+            taggingMap.put("userId", dto.getUserId());
+            taggingMap.put("filePath", dto.getFilePath());
+            taggingMap.put("modelSource", dto.getModelSource());
+            taggingMap.put("tags", dto.getTags());
+
+            String tagJson = mapper.writeValueAsString(taggingMap);
+
+            ErrorLogEntity entity = new ErrorLogEntity(
+                    dto.getCorrelationId(),
+                    dto.getServiceName(),
+                    dto.getMessage(),
+                    dto.getStackTrace(),
+                    dto.getExceptionType(),
+                    tagJson
+            );
+            errorLogRepository.save(entity);
+            log.info("ErrorLog 저장 완료");
+        } catch (Exception e) {
+            log.error("ErrorLog 저장 실패", e);
+        }
     }
 
-    private void saveSystemLog(LogMessageDto dto) {
+    private void saveSystemLog(EventDataDto dto) {
         SystemLogEntity entity = new SystemLogEntity(
                 dto.getCorrelationId(),
                 dto.getServiceName(),
