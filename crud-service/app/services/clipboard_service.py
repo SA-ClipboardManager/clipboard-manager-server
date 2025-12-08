@@ -62,8 +62,8 @@ class ClipboardService:
                     "user_id": user_id,
                     "format": item_create.format,
                     "created_at": item_create.created_at,
-                    "file_path": self._convert_path_to_url(img_meta.get("file_path")),
-                    "thumbnail_path": self._convert_path_to_url(img_meta.get("thumbnail_path")),
+                    "file_path": self._convert_url_to_fs_path(img_meta.get("file_path")),
+                    "thumbnail_path": self._convert_url_to_fs_path(img_meta.get("thumbnail_path")),
                     "width": img_meta.get("width"),
                     "height": img_meta.get("height"),
                     "file_size": img_meta.get("file_size")
@@ -101,23 +101,21 @@ class ClipboardService:
                     # 이미지 메타데이터 조회
                     img_meta = await self.image_repo.get_by_data_id(event.args.get("id"))
                     
-                    event_payload = {
-                        "data_id": event.args.get("id"),
-                        "user_id": user_id,
-                        "format": event.args.get("format"),
-                        "created_at": event.args.get("created_at"),
-                        "correlation_id": event.correlation_id
-                    }
-                    
-                    # 이미지 메타 정보가 있으면 URL 변환해서 포함
-                    if img_meta:
-                        event_payload["file_path"] = self._convert_path_to_url(img_meta.get("file_path"))
-                        event_payload["thumbnail_path"] = self._convert_path_to_url(img_meta.get("thumbnail_path"))
-                        event_payload["width"] = img_meta.get("width")
-                        event_payload["height"] = img_meta.get("height")
-                        event_payload["file_size"] = img_meta.get("file_size")
-                    
-                    await self.message_broker.publish_event("service.crud.item.saved.img", event_payload)
+                    # 이미지 메타 정보가 있을 때만 이벤트 발행 (파일 경로 필수)
+                    if img_meta and img_meta.get("file_path"):
+                        event_payload = {
+                            "data_id": event.args.get("id"),
+                            "user_id": user_id,
+                            "format": event.args.get("format"),
+                            "created_at": event.args.get("created_at"),
+                            "correlation_id": event.correlation_id,
+                            "file_path": self._convert_url_to_fs_path(img_meta.get("file_path")),
+                            "thumbnail_path": self._convert_url_to_fs_path(img_meta.get("thumbnail_path")),
+                            "width": img_meta.get("width"),
+                            "height": img_meta.get("height"),
+                            "file_size": img_meta.get("file_size")
+                        }
+                        await self.message_broker.publish_event("service.crud.item.saved.img", event_payload)
                 
                 # 태그 이벤트 발행
                 if "tags" in event.args and event.args["tags"]:
@@ -232,6 +230,25 @@ class ClipboardService:
             return f"{settings.server_url}{path}"
         
         return path
+    
+    def _convert_url_to_fs_path(self, url_path: Optional[str]) -> Optional[str]:
+        """URL 경로를 파일시스템 경로로 변환 (임베딩 서비스용)"""
+        from ..core.config import settings
+        import os
+        
+        if not url_path:
+            return None
+        
+        # /local/original/xxx.png -> /app/shared_images/uploads/original/xxx.png
+        if url_path.startswith("/local/original/"):
+            filename = url_path.replace("/local/original/", "")
+            return os.path.join(settings.original_dir, filename)
+        elif url_path.startswith("/local/thumbnail/"):
+            filename = url_path.replace("/local/thumbnail/", "")
+            return os.path.join(settings.thumbnail_dir, filename)
+        
+        # 이미 파일시스템 경로인 경우
+        return url_path
     
     def _row_to_response(self, row: Dict[str, Any]) -> ClipboardItemResponse:
         """DB 행을 응답 모델로 변환"""

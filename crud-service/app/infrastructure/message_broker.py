@@ -79,7 +79,7 @@ class MessageBroker:
             
             # topic을 routing_key로 사용
             await exchange.publish(message, routing_key=topic)
-            logger.info(f"[MQ Sent] Event: {topic}, User: {data.get('user_id')}, Data: {data.get('data_id')}")
+            logger.info(f"[MQ Sent] Event: {topic}, User: {data.get('user_id')}, Data: {data.get('data_id')}, file_path: {data.get('file_path', 'N/A')}")
         
         except Exception as e:
             logger.error(f"Failed to publish event: {e}", exc_info=True)
