@@ -54,6 +54,7 @@ class ClipboardService:
             payload["user_id"] = user_id
             payload["correlation_id"] = correlation_id
             await self.message_broker.publish_event("service.crud.item.saved.txt", payload)
+            logger.info(f"Published event: service.crud.item.saved.txt for item {item_create.id} [correlation_id: {correlation_id}]")
         elif item_create.type == "img":
             # 이미지 메타데이터 조회
             img_meta = await self.image_repo.get_by_data_id(item_create.id)
@@ -74,6 +75,7 @@ class ClipboardService:
                     "file_size": img_meta.file_size
                 }
                 await self.message_broker.publish_event("service.crud.item.saved.img", payload)
+                logger.info(f"Published event: service.crud.item.saved.img for item {item_create.id} [correlation_id: {correlation_id}]")
         
         return item_create
     
@@ -101,6 +103,7 @@ class ClipboardService:
                         "correlation_id": event.correlation_id
                     }
                     await self.message_broker.publish_event("service.crud.item.saved.txt", event_payload)
+                    logger.info(f"Published event: service.crud.item.saved.txt for sync item {event.args.get('id')} [correlation_id: {event.correlation_id}]")
                     
                 elif event.args.get("type") == "img":
                     # 이미지 메타데이터 조회
@@ -121,6 +124,7 @@ class ClipboardService:
                             "file_size": img_meta.get("file_size")
                         }
                         await self.message_broker.publish_event("service.crud.item.saved.img", event_payload)
+                        logger.info(f"Published event: service.crud.item.saved.img for sync item {event.args.get('id')} [correlation_id: {event.correlation_id}]")
                 
                 # 태그 이벤트 발행
                 if "tags" in event.args and event.args["tags"]:
@@ -130,6 +134,7 @@ class ClipboardService:
                         "tags": event.args.get("tags"),
                         "correlation_id": event.correlation_id
                     })
+                    logger.info(f"Published event: service.crud.item.tags.synced for item {event.args.get('id')} [correlation_id: {event.correlation_id}]")
             
             elif event.operation == "DELETE":
                 await self.clipboard_repo.delete(event.data_id, user_id)
@@ -138,6 +143,7 @@ class ClipboardService:
                     "user_id": user_id,
                     "correlation_id": event.correlation_id
                 })
+                logger.info(f"Published event: service.crud.item.deleted for item {event.data_id} [correlation_id: {event.correlation_id}]")
             
             processed_count += 1
         
@@ -171,6 +177,7 @@ class ClipboardService:
             "type": item["type"],
             "correlation_id": corr_id
         })
+        logger.info(f"Published event: service.crud.item.deleted for item {item_id} [correlation_id: {corr_id}]")
         
         return {
             "found": True,

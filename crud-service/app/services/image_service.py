@@ -112,6 +112,7 @@ class ImageService:
                 "file_size": processed.metadata.file_size,
                 "correlation_id": corr_id
             })
+            logger.info(f"Published event: service.crud.item.saved.img for image {item_id} [correlation_id: {corr_id}]")
             
             return {
                 "id": item_id,
@@ -194,6 +195,7 @@ class ImageService:
             "file_size": processed.metadata.file_size,
             "correlation_id": corr_id
         })
+        logger.info(f"Published event: service.crud.item.saved.img for clipboard image {item_id} [correlation_id: {corr_id}]")
         
         return {"id": item_id, "status": "created"}
     

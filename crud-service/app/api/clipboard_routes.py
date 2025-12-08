@@ -107,7 +107,10 @@ async def delete_item(
     
     try:
         await conn.begin()
-        result = await service.delete_item(item_id, user_id)
+        # correlation_id 생성 (요청 추적용)
+        from ..shared.utility.correlationId import generate_correlation_id
+        correlation_id = generate_correlation_id()
+        result = await service.delete_item(item_id, user_id, correlation_id)
         await conn.commit()
         
         if not result["found"]:
