@@ -1,6 +1,7 @@
 """
 클립보드 API 라우터
 """
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..domain.models import ClipboardItemResponse

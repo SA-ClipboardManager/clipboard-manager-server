@@ -3,7 +3,6 @@
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
-from fastapi.responses import JSONResponse
 
 from ..services.image_service import ImageService
 from ..services.clipboard_service import ClipboardService
@@ -17,9 +16,6 @@ from ..core.logging import logger
 
 
 router = APIRouter()
-
-
-@router.post("/items/image")
 
 
 @router.post("/clipboard")
