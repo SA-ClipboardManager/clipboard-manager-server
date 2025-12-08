@@ -1,6 +1,9 @@
 package com.ccd.monitoring_service.schedular;
 
-import com.ccd.monitoring_service.dto.LogMessageDto;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.ccd.monitoring_service.dto.EventDataDto;
+import com.ccd.monitoring_service.dto.LogType;
+import com.ccd.monitoring_service.dto.TagDto;
 import com.ccd.monitoring_service.entity.RetryEntity;
 import com.ccd.monitoring_service.entity.RetryStatus;
 import com.ccd.monitoring_service.rabbitmq.config.RabbitMQConfig;
@@ -15,6 +18,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -38,14 +42,45 @@ public class RetryScheduler {
         for (RetryEntity target : targets) {
             log.info("Retry Correlation ID: [{}], Service: [{}]", target.getCorrelationId(), target.getServiceName());
             try {
-                LogMessageDto dto = objectMapper.readValue(target.getMessageJson(), LogMessageDto.class);
+                // 1) tagInfoJson 파싱
+                Map<String, Object> tagMap =
+                        objectMapper.readValue(
+                                target.getTagInfoJson(),
+                                new TypeReference<Map<String, Object>>() {
+                                }
+                        );
+
+                // 2) tags 파싱 (List<Map> → List<TagDto>)
+                List<Map<String, Object>> rawTags =
+                        (List<Map<String, Object>>) tagMap.get("tags");
+
+                List<TagDto> parsedTags = rawTags == null ? null :
+                        rawTags.stream()
+                                .map(m -> new TagDto(
+                                        (String) m.get("label"),
+                                        Float.parseFloat(m.get("score").toString())
+                                ))
+                                .toList();
+                // 3) EventDataDto 복원
+                EventDataDto dto = EventDataDto.builder()
+                        .correlationId(target.getCorrelationId())
+                        .serviceName(target.getServiceName())
+                        .logType(LogType.SYSTEM) // 재시도 전송은 SYSTEM
+                        .message("Retry Attempt")
+
+                        .dataId((String) tagMap.get("dataId"))
+                        .userId((String) tagMap.get("userId"))
+                        .filePath((String) tagMap.get("filePath"))
+                        .modelSource((String) tagMap.get("modelSource"))
+                        .tags(parsedTags)
+                        .build();
                 target.markAsPending();
                 rabbitTemplate.convertAndSend(
                         RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE,
                         target.getServiceName() + ".do.retry",
                         dto
                 );
-                log.info("송신 | send to Exchange: [{}]",RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE);
+                log.info("송신 | send to Exchange: [{}]", RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE);
             } catch (Exception e) {
                 log.error("재발송 중 에러 발생 (심각)", e);
                 // 재시도 횟수가 너무 많으면(예: 10회) delete 하거나 별도 알림 보내는 로직 추가 필요 OR 보상 트랜잭션

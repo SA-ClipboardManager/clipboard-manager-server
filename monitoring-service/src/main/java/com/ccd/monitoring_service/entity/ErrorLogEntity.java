@@ -17,11 +17,16 @@ public class ErrorLogEntity extends BaseLogEntity {
     @Column(columnDefinition = "LONGTEXT")
     private String stackTrace;
 
+    @Column
     private String exceptionType;
 
-    public ErrorLogEntity(String correlationId, String serviceName, String message, String stackTrace, String exceptionType) {
+    @Column(columnDefinition = "LONGTEXT")
+    private String tagInfoJson;
+
+    public ErrorLogEntity(String correlationId, String serviceName, String message, String stackTrace, String exceptionType, String tagInfoJson) {
         super(correlationId, serviceName, message);
         this.stackTrace = stackTrace;
         this.exceptionType = exceptionType;
+        this.tagInfoJson = tagInfoJson;
     }
 }
