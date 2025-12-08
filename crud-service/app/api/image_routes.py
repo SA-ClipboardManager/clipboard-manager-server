@@ -79,6 +79,7 @@ async def create_clipboard_data(
     format: str = Form(...),
     created_at: str = Form(...),
     content: Optional[str] = Form(None),
+    correlation_id: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     user: dict = Depends(get_current_user),
     clipboard_service: ClipboardService = Depends(get_clipboard_service),
@@ -102,12 +103,15 @@ async def create_clipboard_data(
         
         # 기본 클립보드 아이템 생성
         from ..domain.models import ClipboardItemCreate
+        from ...shared.utility.correlationId import generate_correlation_id
+        
         item = ClipboardItemCreate(
             id=id,
             type=type,
             format=format,
             content=content or "",
-            created_at=created_ts
+            created_at=created_ts,
+            correlation_id=correlation_id or generate_correlation_id()
         )
         
         await clipboard_service.create_item(item, user_id)
@@ -120,7 +124,8 @@ async def create_clipboard_data(
                 item_id=id,
                 format=format,
                 created_at=created_ts,
-                user_id=user_id
+                user_id=user_id,
+                correlation_id=item.correlation_id
             )
         
         await conn.commit()

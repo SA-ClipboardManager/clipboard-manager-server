@@ -33,6 +33,7 @@ class ClipboardItemCreate(BaseModel):
     format: str
     created_at: int
     tags: Optional[List[Any]] = []
+    correlation_id: Optional[str] = None  # 요청 추적용 ID
 
 
 class ClipboardItemResponse(BaseModel):

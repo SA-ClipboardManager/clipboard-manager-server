@@ -45,10 +45,14 @@ class ClipboardService:
         # 저장
         await self.clipboard_repo.update(item)
         
+        # correlation_id 설정 (없으면 data_id 사용 - 하위 호환성)
+        correlation_id = item_create.correlation_id or item_create.id
+        
         # 타입별 이벤트 발행
         if item_create.type == "txt":
             payload = item_create.model_dump()
             payload["user_id"] = user_id
+            payload["correlation_id"] = correlation_id
             await self.message_broker.publish_event("service.crud.item.saved.txt", payload)
         elif item_create.type == "img":
             # 이미지 메타데이터 조회
@@ -62,6 +66,7 @@ class ClipboardService:
                     "user_id": user_id,
                     "format": item_create.format,
                     "created_at": item_create.created_at,
+                    "correlation_id": correlation_id,
                     "file_path": self._convert_url_to_fs_path(img_meta.get("file_path")),
                     "thumbnail_path": self._convert_url_to_fs_path(img_meta.get("thumbnail_path")),
                     "width": img_meta.get("width"),

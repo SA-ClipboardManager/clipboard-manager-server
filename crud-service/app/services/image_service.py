@@ -39,7 +39,8 @@ class ImageService:
         format: str,
         created_at: int,
         user_id: str,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        correlation_id: Optional[str] = None
     ) -> dict:
         """이미지 업로드 및 처리"""
         # 이미 존재하는지 확인
@@ -105,6 +106,10 @@ class ImageService:
             )
             await self.image_repo.create(meta)
             
+            # correlation_id 생성 (없으면 data_id 사용 - 하위 호환성)
+            from ..shared.utility.correlationId import get_or_create_correlation_id
+            corr_id = get_or_create_correlation_id(correlation_id) if correlation_id else item_id
+            
             # 이벤트 발행: service.crud.item.saved.img
             await self.message_broker.publish_event("service.crud.item.saved.img", {
                 "data_id": item_id,
@@ -115,7 +120,8 @@ class ImageService:
                 "format": format,
                 "width": width,
                 "height": height,
-                "file_size": file_size
+                "file_size": file_size,
+                "correlation_id": corr_id
             })
             
             return {
@@ -135,7 +141,8 @@ class ImageService:
         item_id: str,
         format: str,
         created_at: int,
-        user_id: str
+        user_id: str,
+        correlation_id: Optional[str] = None
     ) -> dict:
         """클립보드 이미지 업로드 (ISO 타임스탬프 처리 포함)"""
         from datetime import datetime
@@ -183,6 +190,10 @@ class ImageService:
         )
         await self.image_repo.update(meta)
         
+        # correlation_id 생성 (없으면 data_id 사용 - 하위 호환성)
+        from ..shared.utility.correlationId import get_or_create_correlation_id
+        corr_id = get_or_create_correlation_id(correlation_id) if correlation_id else item_id
+        
         # 이벤트 발행: service.crud.item.saved.img (파일 시스템 경로 포함)
         await self.message_broker.publish_event("service.crud.item.saved.img", {
             "data_id": item_id,
@@ -193,7 +204,8 @@ class ImageService:
             "format": format,
             "width": width,
             "height": height,
-            "file_size": file_size
+            "file_size": file_size,
+            "correlation_id": corr_id
         })
         
         return {"id": item_id, "status": "created"}
