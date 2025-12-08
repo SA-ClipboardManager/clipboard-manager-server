@@ -67,11 +67,11 @@ class ClipboardService:
                     "format": item_create.format,
                     "created_at": item_create.created_at,
                     "correlation_id": correlation_id,
-                    "file_path": self._convert_url_to_fs_path(img_meta.get("file_path")),
-                    "thumbnail_path": self._convert_url_to_fs_path(img_meta.get("thumbnail_path")),
-                    "width": img_meta.get("width"),
-                    "height": img_meta.get("height"),
-                    "file_size": img_meta.get("file_size")
+                    "file_path": self._convert_url_to_fs_path(img_meta.file_path),
+                    "thumbnail_path": self._convert_url_to_fs_path(img_meta.thumbnail_path) if img_meta.thumbnail_path else None,
+                    "width": img_meta.width,
+                    "height": img_meta.height,
+                    "file_size": img_meta.file_size
                 }
                 await self.message_broker.publish_event("service.crud.item.saved.img", payload)
         
