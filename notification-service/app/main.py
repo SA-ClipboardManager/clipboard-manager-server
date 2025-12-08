@@ -94,30 +94,47 @@ async def consume_events():
                     try:
                         data = json.loads(message.body.decode())
                         event_type = data.get("event")
-                        target_user_id = data.get("user_id") or data.get("data", {}).get("user_id")
+                        # 두 가지 메시지 형식 모두 지원:
+                        # 1. 기존 형식: {event, data: {user_id, ...}}
+                        # 2. EventDataDto 형식: {correlationId, serviceName, dataId, userId, ...}
+                        inner_data = data.get("data", data)  # 'data' 필드가 있으면 사용, 없으면 전체 사용
+                        target_user_id = inner_data.get("user_id") or inner_data.get("userId")
+
                         
                         # 재시도 요청 감지
                         is_retry_request = event_type and "notification-service.do.retry" in event_type
                         
+                        # routing_key 기반 이벤트 타입 감지 (event 필드 없을 때의 backup)
+                        if not event_type and message.routing_key:
+                            event_type = message.routing_key
+                            logger.info(f"[MQ] Event type from routing_key: {event_type}")
+
                         if target_user_id:
                             logger.info(f"[MQ Received] {'Retry request' if is_retry_request else 'Event'}: {event_type} -> User: {target_user_id}")
                             
                             try:
                                 # WebSocket으로 전달할 메시지 구성
-                                # service.tagging.completed 이벤트의 경우 type을 tagging_result로 변환
-                                if event_type == "service.tagging.completed":
+                                # service.tagging.success/error 이벤트의 경우 tagging_result로 변환
+                                if "tagging" in str(event_type):
+                                    # EventDataDto 형식에서 필요한 필드 추출
                                     ws_message = {
                                         "type": "tagging_result",
                                         "event": event_type,
+                                        "data_id": inner_data.get("dataId"),  # ✅ data_id로 변환
                                         "user_id": target_user_id,
-                                        **data.get("data", {})
+                                        "tags": inner_data.get("tags", []),
+                                        "file_path": inner_data.get("filePath"),
+                                        "model_source": inner_data.get("modelSource"),
+                                        "correlation_id": inner_data.get("correlationId"),
                                     }
+                                    logger.info(f"[MQ Tagging] Converted to WS format: dataId={ws_message.get('data_id')}, tags count={len(ws_message.get('tags', []))}")
                                 else:
                                     ws_message = {
                                         "type": event_type,
                                         "event": event_type,
-                                        **data.get("data", {})
+                                        **inner_data
                                     }
+
                                 
                                 # WebSocket Manager에게 전달
                                 await manager.broadcast(target_user_id, json.dumps(ws_message))
@@ -125,7 +142,7 @@ async def consume_events():
                                 # 재시도 요청인 경우 성공 결과 발행
                                 if is_retry_request and monitoring_publisher:
                                     await monitoring_publisher.publish_retry_result(
-                                        correlation_id=data.get("correlation_id", event_type),
+                                        correlation_id=inner_data.get("correlationId") or data.get("correlation_id", event_type),
                                         success=True,
                                         message=f"Retry successful: notification sent to user {target_user_id}"
                                     )
@@ -136,7 +153,7 @@ async def consume_events():
                                 # 재시도 요청인 경우 실패 결과 발행
                                 if is_retry_request and monitoring_publisher:
                                     await monitoring_publisher.publish_retry_result(
-                                        correlation_id=data.get("correlation_id", event_type),
+                                        correlation_id=inner_data.get("correlationId") or data.get("correlation_id", event_type),
                                         success=False,
                                         message=f"Retry failed: could not send notification",
                                         exception=send_error
@@ -145,19 +162,20 @@ async def consume_events():
                                     # 일반 요청 실패는 에러 로그로
                                     if monitoring_publisher:
                                         await monitoring_publisher.publish_error_log(
-                                            correlation_id=data.get("correlation_id", "unknown"),
+                                            correlation_id=inner_data.get("correlationId") or data.get("correlation_id", "unknown"),
                                             message=f"Failed to send notification",
                                             exception=send_error
                                         )
                         else:
-                            logger.warning(f"[MQ Received] No user_id in event: {event_type}")
+                            logger.warning(f"[MQ Received] No user_id in event: {event_type}, data={inner_data}")
+
                             
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
                         
                         # 모니터링 에러 로그 발행
                         if monitoring_publisher:
-                            correlation_id = data.get("correlation_id", "unknown") if 'data' in locals() else "unknown"
+                            correlation_id = inner_data.get("correlationId") if 'inner_data' in locals() else "unknown"
                             is_retry = 'is_retry_request' in locals() and locals()['is_retry_request']
                             
                             if is_retry:

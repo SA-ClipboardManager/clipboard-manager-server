@@ -147,7 +147,7 @@ class ClipboardService:
             tag_mappings=[]
         )
     
-    async def delete_item(self, item_id: str, user_id: str) -> Dict[str, Any]:
+    async def delete_item(self, item_id: str, user_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         """클립보드 아이템 삭제"""
         # 소유권 및 메타데이터 확인
         item = await self.clipboard_repo.get_with_ownership(item_id)
@@ -161,11 +161,15 @@ class ClipboardService:
         # 삭제
         await self.clipboard_repo.delete(item_id, user_id)
         
+        # correlation_id 설정 (없으면 item_id 사용 - 하위 호환성)
+        corr_id = correlation_id or item_id
+        
         # 이벤트 발행
         await self.message_broker.publish_event("service.crud.item.deleted", {
             "data_id": item_id,
             "user_id": user_id,
-            "type": item["type"]
+            "type": item["type"],
+            "correlation_id": corr_id
         })
         
         return {
