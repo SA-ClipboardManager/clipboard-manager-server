@@ -104,6 +104,11 @@ async def consume_events():
                         # 재시도 요청 감지
                         is_retry_request = event_type and "notification-service.do.retry" in event_type
                         
+                        # routing_key 기반 이벤트 타입 감지 (event 필드 없을 때의 backup)
+                        if not event_type and message.routing_key:
+                            event_type = message.routing_key
+                            logger.info(f"[MQ] Event type from routing_key: {event_type}")
+
                         if target_user_id:
                             logger.info(f"[MQ Received] {'Retry request' if is_retry_request else 'Event'}: {event_type} -> User: {target_user_id}")
                             
