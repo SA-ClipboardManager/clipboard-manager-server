@@ -1,6 +1,6 @@
 package com.ccd.monitoring_service.service;
 
-import com.ccd.monitoring_service.dto.LogMessageDto;
+import com.ccd.monitoring_service.dto.EventDataDto;
 import com.ccd.monitoring_service.dto.LogType;
 import com.ccd.monitoring_service.entity.RetryEntity;
 import com.ccd.monitoring_service.entity.RetryHistoryEntity;
@@ -18,6 +18,9 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -29,7 +32,7 @@ public class RetryConsumerService {
     // 라우팅 키에 따른 컨트롤러 역할
     @RabbitListener(queues = RabbitMQConfig.QUEUE_RETRY)
     @Transactional
-    public void handleRetry(LogMessageDto dto,
+    public void handleRetry(EventDataDto dto,
                             @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         log.info("수신 | RoutingKey: [{}], CORRELATION ID: [{}]",
                 routingKey, dto.getCorrelationId());
@@ -39,22 +42,32 @@ public class RetryConsumerService {
         } else if (routingKey.contains(".retry.")) {// n번째 재시도 요청
             handleRetryResult(dto);
         } else {
-            log.warn("수신 | 처리할 수 없는 라우팅 키:{}",routingKey);
+            log.warn("수신 | 처리할 수 없는 라우팅 키:{}", routingKey);
         }
     }
 
-    private void handleNewFailure(LogMessageDto dto) {
+    private void handleNewFailure(EventDataDto dto) {
         if (retryRepository.existsByCorrelationId(dto.getCorrelationId())) {
-            log.info("수신 | 이미 등록된 실패 건입니다. 무시. ID: {}",dto.getCorrelationId());
+            log.info("수신 | 이미 등록된 실패 건입니다. 무시. ID: {}", dto.getCorrelationId());
             return;
         }
 
         try {
             log.info("수신 | ID: {}", dto.getCorrelationId());
-            String json = objectMapper.writeValueAsString(dto);
+            Map<String, Object> tagMap = new HashMap<>();
+            tagMap.put("dataId", dto.getDataId());
+            tagMap.put("userId", dto.getUserId());
+            tagMap.put("filePath", dto.getFilePath());
+            tagMap.put("modelSource", dto.getModelSource());
+            tagMap.put("tags", dto.getTags());
+
+            // 2) JSON 변환
+            String tagJson = objectMapper.writeValueAsString(tagMap);
+
+            // 3) RetryEntity 저장
             RetryEntity entity = new RetryEntity(
                     dto.getCorrelationId(),
-                    json,
+                    tagJson,                     // ★ JSON 문자열
                     dto.getServiceName()
             );
             // 신규 등록 시에는 다음 실행 시간만 잡고 끝 (스케줄러가 가져감)
@@ -66,7 +79,7 @@ public class RetryConsumerService {
         }
     }
 
-    private void handleRetryResult(LogMessageDto dto) {
+    private void handleRetryResult(EventDataDto dto) {
         RetryEntity entity = retryRepository.findByCorrelationId(dto.getCorrelationId())
                 .stream().findFirst().orElse(null);
 
@@ -85,7 +98,7 @@ public class RetryConsumerService {
             entity.planNextAttempt(); // 시간 뒤로 미루기
             entity.markAsFail(dto.getMessage());
 
-            saveHistory(entity,RetryStatus.FAIL,dto.getServiceName());
+            saveHistory(entity, RetryStatus.FAIL, dto.getServiceName());
         }
     }
 

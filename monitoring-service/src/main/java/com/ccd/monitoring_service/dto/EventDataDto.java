@@ -2,12 +2,14 @@ package com.ccd.monitoring_service.dto;
 
 import lombok.*;
 
+import java.util.List;
+
 @Data
 @Builder
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor
-public class LogMessageDto {
+public class EventDataDto {
     // --- [공통 필드] ---
     private String correlationId; // 트랜잭션 추적 ID (필수)
     private String serviceName;   // 보낸 서비스 명 (예: payment)
@@ -20,4 +22,11 @@ public class LogMessageDto {
     // --- [에러 로그용 필드] ---
     private String stackTrace;    // 에러 상세 (ErrorLog용)
     private String exceptionType; // 예외 클래스 이름 (ErrorLog용)
+
+    // --- [태깅용 필드] --- 실패 시 저장
+    private String dataId;          // tagging 대상 UUID
+    private String userId;          // tagging 요청한 유저
+    private String filePath;        // 파일 경로
+    private List<TagDto> tags;      // 태깅 결과 (옵션)
+    private String modelSource;     // 예: mobilenetv3
 }
