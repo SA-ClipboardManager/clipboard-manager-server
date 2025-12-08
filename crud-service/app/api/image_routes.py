@@ -20,55 +20,6 @@ router = APIRouter()
 
 
 @router.post("/items/image")
-async def upload_image(
-    file: UploadFile = File(...),
-    id: str = Form(...),
-    format: str = Form(...),
-    created_at: int = Form(...),
-    user: dict = Depends(get_current_user),
-    service: ImageService = Depends(get_image_service),
-    db=Depends(get_db)
-):
-    """
-    이미지 파일 업로드
-    """
-    conn, cursor = db
-    user_id = user["user_id"]
-    
-    try:
-        await conn.begin()
-        
-        # 파일 읽기
-        contents = await file.read()
-        
-        # 이미지 업로드 처리
-        result = await service.upload_image(
-            file_content=contents,
-            item_id=id,
-            format=format,
-            created_at=created_at,
-            user_id=user_id,
-            filename=file.filename
-        )
-        
-        await conn.commit()
-        
-        status_code = 200 if result["status"] == "exists" else 201
-        return JSONResponse(status_code=status_code, content=result)
-    
-    except ValueError as e:
-        await conn.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        await conn.rollback()
-        logger.error(f"Image upload failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to upload image"
-        )
 
 
 @router.post("/clipboard")

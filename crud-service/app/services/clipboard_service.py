@@ -5,8 +5,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from ..domain.models import (
-    ClipboardItem, ClipboardItemCreate, ClipboardItemResponse,
-    SyncEventItem, SyncResponse
+    ClipboardItem, ClipboardItemCreate, ClipboardItemResponse
 )
 from ..domain.repositories import IClipboardRepository, IImageMetaRepository
 from ..infrastructure.message_broker import MessageBroker
@@ -55,103 +54,9 @@ class ClipboardService:
             payload["correlation_id"] = correlation_id
             await self.message_broker.publish_event("service.crud.item.saved.txt", payload)
             logger.info(f"Published event: service.crud.item.saved.txt for item {item_create.id} [correlation_id: {correlation_id}]")
-        elif item_create.type == "img":
-            # 이미지 메타데이터 조회
-            img_meta = await self.image_repo.get_by_data_id(item_create.id)
-            
-            # 이미지 메타 정보가 있을 때만 이벤트 발행
-            # (upload_clipboard_image 플로우에서는 메타데이터 저장 후 직접 이벤트 발행)
-            if img_meta:
-                payload = {
-                    "data_id": item_create.id,
-                    "user_id": user_id,
-                    "format": item_create.format,
-                    "created_at": item_create.created_at,
-                    "correlation_id": correlation_id,
-                    "file_path": self._convert_url_to_fs_path(img_meta.file_path),
-                    "thumbnail_path": self._convert_url_to_fs_path(img_meta.thumbnail_path) if img_meta.thumbnail_path else None,
-                    "width": img_meta.width,
-                    "height": img_meta.height,
-                    "file_size": img_meta.file_size
-                }
-                await self.message_broker.publish_event("service.crud.item.saved.img", payload)
-                logger.info(f"Published event: service.crud.item.saved.img for item {item_create.id} [correlation_id: {correlation_id}]")
+        # 이미지는 image_service.upload_clipboard_image에서 이미 이벤트 발행함 (중복 방지)
         
         return item_create
-    
-    async def sync_events(
-        self,
-        events: List[SyncEventItem],
-        user_id: str
-    ) -> SyncResponse:
-        """동기화 이벤트 처리"""
-        processed_count = 0
-        
-        for event in events:
-            if event.operation in ["INSERT", "UPDATE"]:
-                # 아이템 저장
-                await self._save_item_from_sync(event.args, user_id)
-                
-                # 타입별 저장 성공 이벤트 발행
-                if event.args.get("type") == "txt":
-                    event_payload = {
-                        "data_id": event.args.get("id"),
-                        "user_id": user_id,
-                        "content": event.args.get("content"),
-                        "format": event.args.get("format"),
-                        "created_at": event.args.get("created_at"),
-                        "correlation_id": event.correlation_id
-                    }
-                    await self.message_broker.publish_event("service.crud.item.saved.txt", event_payload)
-                    logger.info(f"Published event: service.crud.item.saved.txt for sync item {event.args.get('id')} [correlation_id: {event.correlation_id}]")
-                    
-                elif event.args.get("type") == "img":
-                    # 이미지 메타데이터 조회
-                    img_meta = await self.image_repo.get_by_data_id(event.args.get("id"))
-                    
-                    # 이미지 메타 정보가 있을 때만 이벤트 발행 (파일 경로 필수)
-                    if img_meta and img_meta.get("file_path"):
-                        event_payload = {
-                            "data_id": event.args.get("id"),
-                            "user_id": user_id,
-                            "format": event.args.get("format"),
-                            "created_at": event.args.get("created_at"),
-                            "correlation_id": event.correlation_id,
-                            "file_path": self._convert_url_to_fs_path(img_meta.get("file_path")),
-                            "thumbnail_path": self._convert_url_to_fs_path(img_meta.get("thumbnail_path")),
-                            "width": img_meta.get("width"),
-                            "height": img_meta.get("height"),
-                            "file_size": img_meta.get("file_size")
-                        }
-                        await self.message_broker.publish_event("service.crud.item.saved.img", event_payload)
-                        logger.info(f"Published event: service.crud.item.saved.img for sync item {event.args.get('id')} [correlation_id: {event.correlation_id}]")
-                
-                # 태그 이벤트 발행
-                if "tags" in event.args and event.args["tags"]:
-                    await self.message_broker.publish_event("service.crud.item.tags.synced", {
-                        "data_id": event.args.get("id"),
-                        "user_id": user_id,
-                        "tags": event.args.get("tags"),
-                        "correlation_id": event.correlation_id
-                    })
-                    logger.info(f"Published event: service.crud.item.tags.synced for item {event.args.get('id')} [correlation_id: {event.correlation_id}]")
-            
-            elif event.operation == "DELETE":
-                await self.clipboard_repo.delete(event.data_id, user_id)
-                await self.message_broker.publish_event("service.crud.item.deleted", {
-                    "data_id": event.data_id,
-                    "user_id": user_id,
-                    "correlation_id": event.correlation_id
-                })
-                logger.info(f"Published event: service.crud.item.deleted for item {event.data_id} [correlation_id: {event.correlation_id}]")
-            
-            processed_count += 1
-        
-        return SyncResponse(
-            success=True,
-            processed_count=processed_count,
-            tag_mappings=[]
-        )
     
     async def delete_item(self, item_id: str, user_id: str, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         """클립보드 아이템 삭제"""
@@ -203,24 +108,6 @@ class ClipboardService:
         """사용자의 모든 클립보드 아이템 조회"""
         rows = await self.clipboard_repo.get_by_user(user_id)
         return [self._row_to_response(row) for row in rows]
-    
-    async def _save_item_from_sync(self, item_data: dict, user_id: str):
-        """동기화 데이터로부터 아이템 저장"""
-        required_fields = ('id', 'type', 'format', 'created_at')
-        if not all(k in item_data for k in required_fields):
-            logger.warning(f"Missing required fields: {item_data.keys()}")
-            return
-        
-        item = ClipboardItem(
-            id=item_data['id'],
-            user_id=user_id,
-            type=item_data['type'],
-            format=item_data['format'],
-            content=item_data.get('content'),
-            created_at=item_data['created_at']
-        )
-        
-        await self.clipboard_repo.update(item)
     
     def _convert_path_to_url(self, path: Optional[str]) -> Optional[str]:
         """파일 경로를 HTTP URL로 변환"""
