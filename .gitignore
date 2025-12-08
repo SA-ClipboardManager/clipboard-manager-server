@@ -144,6 +144,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# local files
+my_local_images/
+
 # Spyder project settings
 .spyderproject
 .spyproject
