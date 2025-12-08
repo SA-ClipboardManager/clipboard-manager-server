@@ -221,6 +221,9 @@ __marimo__/
 *.tiff
 *.tif
 
+#prometheus
+prometheus.yml
+
 # Image upload directories
 my_local_images/
 uploads/
