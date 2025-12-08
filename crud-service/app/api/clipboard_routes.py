@@ -38,11 +38,11 @@ async def handle_sync_events(
         return result
     except Exception as e:
         await conn.rollback()
-        logger.error(f"Sync failed: {e}", exc_info=True)
+        correlation_id = events[0].correlation_id if events else "unknown"
+        logger.error(f"Sync failed: {e} [correlation_id: {correlation_id}]", exc_info=True)
         
         # 모니터링 에러 로그 발행
         from ..main import monitoring_publisher
-        correlation_id = events[0].correlation_id if events else "unknown"
         await monitoring_publisher.publish_error_log(
             correlation_id=correlation_id,
             message=f"Sync failed for user {user_id}",
@@ -75,12 +75,13 @@ async def create_item(
         return result
     except Exception as e:
         await conn.rollback()
-        logger.error(f"Create item failed: {e}", exc_info=True)
+        correlation_id = item.correlation_id or item.id
+        logger.error(f"Create item failed: {e} [correlation_id: {correlation_id}]", exc_info=True)
         
         # 모니터링 에러 로그 발행
         from ..main import monitoring_publisher
         await monitoring_publisher.publish_error_log(
-            correlation_id=item.id,
+            correlation_id=correlation_id,
             message=f"Create item failed for user {user_id}",
             exception=e
         )

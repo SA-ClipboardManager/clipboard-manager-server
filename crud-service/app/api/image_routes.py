@@ -133,7 +133,17 @@ async def create_clipboard_data(
     
     except Exception as e:
         await conn.rollback()
-        logger.error(f"Create clipboard data failed: {e}", exc_info=True)
+        corr_id = correlation_id or id
+        logger.error(f"Create clipboard data failed: {e} [correlation_id: {corr_id}]", exc_info=True)
+        
+        # 모니터링 에러 로그 발행
+        from ..main import monitoring_publisher
+        await monitoring_publisher.publish_error_log(
+            correlation_id=corr_id,
+            message=f"Create clipboard data failed for user {user_id}",
+            exception=e
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create clipboard data: {str(e)}"
