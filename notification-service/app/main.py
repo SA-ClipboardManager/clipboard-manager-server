@@ -83,8 +83,9 @@ async def consume_events():
         # 4. Exchange 바인딩
         await queue.bind(notifications_exchange)  # notifications exchange (fanout)
         await queue.bind(main_exchange, routing_key="service.#")  # main.exchange의 모든 service.* 이벤트
+        await queue.bind(main_exchange, routing_key="notification-service.do.retry")  # 재시도 요청
 
-        logger.info(" [*] Waiting for notification events (notifications + main.exchange)...")
+        logger.info(" [*] Waiting for notification events (notifications + main.exchange + retry requests)...")
 
         # 5. 메시지 수신 루프
         async with queue.iterator() as queue_iter:
@@ -95,27 +96,59 @@ async def consume_events():
                         event_type = data.get("event")
                         target_user_id = data.get("user_id") or data.get("data", {}).get("user_id")
                         
+                        # 재시도 요청 감지
+                        is_retry_request = event_type and "notification-service.do.retry" in event_type
+                        
                         if target_user_id:
-                            logger.info(f"[MQ Received] Event: {event_type} -> User: {target_user_id}")
+                            logger.info(f"[MQ Received] {'Retry request' if is_retry_request else 'Event'}: {event_type} -> User: {target_user_id}")
                             
-                            # WebSocket으로 전달할 메시지 구성
-                            # service.tagging.completed 이벤트의 경우 type을 tagging_result로 변환
-                            if event_type == "service.tagging.completed":
-                                ws_message = {
-                                    "type": "tagging_result",
-                                    "event": event_type,
-                                    "user_id": target_user_id,
-                                    **data.get("data", {})
-                                }
-                            else:
-                                ws_message = {
-                                    "type": event_type,
-                                    "event": event_type,
-                                    **data.get("data", {})
-                                }
-                            
-                            # WebSocket Manager에게 전달
-                            await manager.broadcast(target_user_id, json.dumps(ws_message))
+                            try:
+                                # WebSocket으로 전달할 메시지 구성
+                                # service.tagging.completed 이벤트의 경우 type을 tagging_result로 변환
+                                if event_type == "service.tagging.completed":
+                                    ws_message = {
+                                        "type": "tagging_result",
+                                        "event": event_type,
+                                        "user_id": target_user_id,
+                                        **data.get("data", {})
+                                    }
+                                else:
+                                    ws_message = {
+                                        "type": event_type,
+                                        "event": event_type,
+                                        **data.get("data", {})
+                                    }
+                                
+                                # WebSocket Manager에게 전달
+                                await manager.broadcast(target_user_id, json.dumps(ws_message))
+                                
+                                # 재시도 요청인 경우 성공 결과 발행
+                                if is_retry_request and monitoring_publisher:
+                                    await monitoring_publisher.publish_retry_result(
+                                        correlation_id=data.get("correlation_id", event_type),
+                                        success=True,
+                                        message=f"Retry successful: notification sent to user {target_user_id}"
+                                    )
+                                    
+                            except Exception as send_error:
+                                logger.error(f"Failed to send notification: {send_error}")
+                                
+                                # 재시도 요청인 경우 실패 결과 발행
+                                if is_retry_request and monitoring_publisher:
+                                    await monitoring_publisher.publish_retry_result(
+                                        correlation_id=data.get("correlation_id", event_type),
+                                        success=False,
+                                        message=f"Retry failed: could not send notification",
+                                        exception=send_error
+                                    )
+                                else:
+                                    # 일반 요청 실패는 에러 로그로
+                                    if monitoring_publisher:
+                                        await monitoring_publisher.publish_error_log(
+                                            correlation_id=data.get("correlation_id", "unknown"),
+                                            message=f"Failed to send notification",
+                                            exception=send_error
+                                        )
                         else:
                             logger.warning(f"[MQ Received] No user_id in event: {event_type}")
                             
@@ -124,11 +157,24 @@ async def consume_events():
                         
                         # 모니터링 에러 로그 발행
                         if monitoring_publisher:
-                            await monitoring_publisher.publish_error_log(
-                                correlation_id=data.get("correlation_id", "unknown"),
-                                message=f"Failed to process notification message",
-                                exception=e
-                            )
+                            correlation_id = data.get("correlation_id", "unknown") if 'data' in locals() else "unknown"
+                            is_retry = 'is_retry_request' in locals() and locals()['is_retry_request']
+                            
+                            if is_retry:
+                                # 재시도 요청 처리 중 에러
+                                await monitoring_publisher.publish_retry_result(
+                                    correlation_id=correlation_id,
+                                    success=False,
+                                    message=f"Failed to process retry request",
+                                    exception=e
+                                )
+                            else:
+                                # 일반 메시지 처리 중 에러
+                                await monitoring_publisher.publish_error_log(
+                                    correlation_id=correlation_id,
+                                    message=f"Failed to process notification message",
+                                    exception=e
+                                )
     
     except asyncio.CancelledError:
         logger.info("Consumer task cancelled.")
