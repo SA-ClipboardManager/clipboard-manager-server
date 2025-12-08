@@ -183,7 +183,18 @@ class ImageService:
         )
         await self.image_repo.update(meta)
         
-        # 이벤트 발행은 clipboard_service.create_item()에서 이미 처리됨
+        # 이벤트 발행: service.crud.item.saved.img (파일 시스템 경로 포함)
+        await self.message_broker.publish_event("service.crud.item.saved.img", {
+            "data_id": item_id,
+            "user_id": user_id,
+            "file_path": file_path,  # 파일시스템 경로
+            "thumbnail_path": thumb_path,  # 파일시스템 경로
+            "created_at": created_ts,
+            "format": format,
+            "width": width,
+            "height": height,
+            "file_size": file_size
+        })
         
         return {"id": item_id, "status": "created"}
     

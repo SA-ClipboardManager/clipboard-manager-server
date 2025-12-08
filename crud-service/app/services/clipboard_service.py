@@ -54,22 +54,21 @@ class ClipboardService:
             # 이미지 메타데이터 조회
             img_meta = await self.image_repo.get_by_data_id(item_create.id)
             
-            payload = {
-                "data_id": item_create.id,
-                "user_id": user_id,
-                "format": item_create.format,
-                "created_at": item_create.created_at,
-            }
-            
-            # 이미지 메타 정보가 있으면 URL 변환해서 포함
+            # 이미지 메타 정보가 있을 때만 이벤트 발행
+            # (upload_clipboard_image 플로우에서는 메타데이터 저장 후 직접 이벤트 발행)
             if img_meta:
-                payload["file_path"] = self._convert_path_to_url(img_meta.get("file_path"))
-                payload["thumbnail_path"] = self._convert_path_to_url(img_meta.get("thumbnail_path"))
-                payload["width"] = img_meta.get("width")
-                payload["height"] = img_meta.get("height")
-                payload["file_size"] = img_meta.get("file_size")
-            
-            await self.message_broker.publish_event("service.crud.item.saved.img", payload)
+                payload = {
+                    "data_id": item_create.id,
+                    "user_id": user_id,
+                    "format": item_create.format,
+                    "created_at": item_create.created_at,
+                    "file_path": self._convert_path_to_url(img_meta.get("file_path")),
+                    "thumbnail_path": self._convert_path_to_url(img_meta.get("thumbnail_path")),
+                    "width": img_meta.get("width"),
+                    "height": img_meta.get("height"),
+                    "file_size": img_meta.get("file_size")
+                }
+                await self.message_broker.publish_event("service.crud.item.saved.img", payload)
         
         return item_create
     
