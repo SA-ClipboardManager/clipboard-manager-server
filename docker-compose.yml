@@ -209,6 +209,10 @@ services:
     container_name: prometheus
     env_file:
       - .env
+    environment:
+      BASIC_SERVER: ${BASIC_SERVER}
+      TAGGING_SERVER: ${TAGGING_SERVER}
+      EMBEDDING_SERVER: ${EMBEDDING_SERVER}
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
@@ -225,6 +229,8 @@ services:
       - clip-net
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
 
   node-exporter:
     image: prom/node-exporter:latest
@@ -234,6 +240,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  grafana_data:
   login_mysql_data:
   crud_mysql_data:
   monitoring_mysql_data:
