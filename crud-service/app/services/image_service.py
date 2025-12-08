@@ -105,8 +105,8 @@ class ImageService:
             )
             await self.image_repo.create(meta)
             
-            # 이벤트 발행: crud:imgSave_success
-            await self.message_broker.publish_event("crud:imgSave_success", {
+            # 이벤트 발행: service.crud.item.saved.img
+            await self.message_broker.publish_event("service.crud.item.saved.img", {
                 "data_id": item_id,
                 "user_id": user_id,
                 "file_path": orig_path_fs,
@@ -183,18 +183,7 @@ class ImageService:
         )
         await self.image_repo.update(meta)
         
-        # 이벤트 발행: crud:imgSave_success
-        await self.message_broker.publish_event("crud:imgSave_success", {
-            "data_id": item_id,
-            "user_id": user_id,
-            "file_path": file_path,
-            "thumbnail_path": thumb_path,
-            "created_at": created_ts,
-            "format": ext,
-            "width": width,
-            "height": height,
-            "file_size": file_size
-        })
+        # 이벤트 발행은 clipboard_service.create_item()에서 이미 처리됨
         
         return {"id": item_id, "status": "created"}
     
