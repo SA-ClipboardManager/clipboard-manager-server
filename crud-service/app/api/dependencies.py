@@ -8,6 +8,7 @@ import aiomysql
 from ..infrastructure.database import db_manager
 from ..infrastructure.repositories import ClipboardRepository, ImageMetaRepository
 from ..infrastructure.message_broker import message_broker
+from ..infrastructure.image_processor import ImageProcessor
 from ..services.clipboard_service import ClipboardService
 from ..services.image_service import ImageService
 from ..core.logging import logger
@@ -44,6 +45,15 @@ async def get_image_repository(
 
 
 # ----------------------------------------------------------------------
+# Infrastructure Dependencies
+# ----------------------------------------------------------------------
+
+def get_image_processor() -> ImageProcessor:
+    """이미지 프로세서 의존성 (싱글톤)"""
+    return ImageProcessor()
+
+
+# ----------------------------------------------------------------------
 # Service Dependencies
 # ----------------------------------------------------------------------
 
@@ -57,10 +67,11 @@ async def get_clipboard_service(
 
 async def get_image_service(
     clipboard_repo: ClipboardRepository = Depends(get_clipboard_repository),
-    image_repo: ImageMetaRepository = Depends(get_image_repository)
+    image_repo: ImageMetaRepository = Depends(get_image_repository),
+    image_processor: ImageProcessor = Depends(get_image_processor)
 ) -> ImageService:
     """이미지 서비스 의존성"""
-    return ImageService(clipboard_repo, image_repo, message_broker)
+    return ImageService(clipboard_repo, image_repo, message_broker, image_processor)
 
 
 # ----------------------------------------------------------------------

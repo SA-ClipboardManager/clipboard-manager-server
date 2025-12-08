@@ -204,6 +204,7 @@ services:
       - crud-service
       - notification-service
       - monitoring-service
+      - embedding-service-api
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -232,6 +233,44 @@ services:
     pid: "host"
     network_mode: host
     restart: unless-stopped
+
+  embedding-service-api:
+    build:
+      context: ../clipboard-manager-embedding/embedding-service
+    container_name: embedding-service-api
+    env_file:
+      - .env
+    environment:
+      SERVICE_MODE: api
+      RABBITMQ_HOST: rabbitmq-broker
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq-broker:5672/
+      PINECONE_API_KEY: ${PINECONE_API_KEY}
+    volumes:
+      - /mnt/nfs/shared_images:/app/shared_images
+    depends_on:
+      - rabbitmq-broker
+    ports:
+      - "8002:8000"
+    networks:
+      - clip-net
+
+  embedding-service-consumer:
+    build:
+      context: ../clipboard-manager-embedding/embedding-service
+    container_name: embedding-service-consumer
+    env_file:
+      - .env
+    environment:
+      SERVICE_MODE: consumer
+      RABBITMQ_HOST: rabbitmq-broker
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq-broker:5672/
+      PINECONE_API_KEY: ${PINECONE_API_KEY}
+    volumes:
+      - /mnt/nfs/shared_images:/app/shared_images
+    depends_on:
+      - rabbitmq-broker
+    networks:
+      - clip-net
 
 volumes:
   login_mysql_data:

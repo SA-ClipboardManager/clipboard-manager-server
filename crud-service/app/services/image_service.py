@@ -2,15 +2,14 @@
 이미지 처리 서비스
 """
 import os
-import io
 import asyncio
-from typing import Tuple, Optional
-from PIL import Image
+from typing import Optional
 import aiofiles
 
 from ..domain.models import ImageMeta
 from ..domain.repositories import IClipboardRepository, IImageMetaRepository
 from ..infrastructure.message_broker import MessageBroker
+from ..infrastructure.image_processor import ImageProcessor
 from ..core.config import settings
 from ..core.logging import logger
 
@@ -22,11 +21,13 @@ class ImageService:
         self,
         clipboard_repo: IClipboardRepository,
         image_repo: IImageMetaRepository,
-        message_broker: MessageBroker
+        message_broker: MessageBroker,
+        image_processor: Optional[ImageProcessor] = None
     ):
         self.clipboard_repo = clipboard_repo
         self.image_repo = image_repo
         self.message_broker = message_broker
+        self.image_processor = image_processor or ImageProcessor()
         
         # 디렉토리 생성
         os.makedirs(settings.original_dir, exist_ok=True)
@@ -47,25 +48,13 @@ class ImageService:
         if await self.clipboard_repo.exists(item_id):
             return {"id": item_id, "status": "exists", "message": "Already exists"}
         
-        # 파일 크기
-        file_size = len(file_content)
-        
-        # 이미지 검증 및 메타데이터 추출
-        try:
-            loop = asyncio.get_running_loop()
-            image = await loop.run_in_executor(
-                None,
-                lambda: Image.open(io.BytesIO(file_content))
-            )
-            width, height = image.size
-        except Exception as e:
-            logger.error(f"Invalid image file: {e}")
-            raise ValueError("Invalid image file")
+        # 이미지 검증 및 메타데이터 추출 (ImageProcessor 사용)
+        processed = await self.image_processor.validate_and_extract_metadata(file_content)
         
         # 파일명 생성
-        ext = self._get_extension(filename, format)
+        ext = self.image_processor.get_file_extension(filename, format)
         orig_name = f"{item_id}.{ext}"
-        thumb_name = f"{item_id}_thumb.{ext}"
+        thumb_name = f"{item_id}_thumb.jpg"
         
         # 파일 경로
         orig_path_fs = os.path.join(settings.original_dir, orig_name)
@@ -80,8 +69,8 @@ class ImageService:
             async with aiofiles.open(orig_path_fs, 'wb') as f:
                 await f.write(file_content)
             
-            # 썸네일 생성 및 저장
-            await self._create_thumbnail(image, thumb_path_fs)
+            # 썸네일 생성 및 저장 (ImageProcessor 사용)
+            await self.image_processor.create_thumbnail(processed.image, thumb_path_fs)
             
             # DB에 저장 (트랜잭션은 상위 레이어에서 처리)
             from ..domain.models import ClipboardItem
@@ -98,9 +87,9 @@ class ImageService:
             # 이미지 메타데이터 저장
             meta = ImageMeta(
                 data_id=item_id,
-                width=width,
-                height=height,
-                file_size=file_size,
+                width=processed.metadata.width,
+                height=processed.metadata.height,
+                file_size=processed.metadata.file_size,
                 file_path=orig_url,
                 thumbnail_path=thumb_url
             )
@@ -118,9 +107,9 @@ class ImageService:
                 "thumbnail_path": thumb_path_fs,
                 "created_at": created_at,
                 "format": format,
-                "width": width,
-                "height": height,
-                "file_size": file_size,
+                "width": processed.metadata.width,
+                "height": processed.metadata.height,
+                "file_size": processed.metadata.file_size,
                 "correlation_id": corr_id
             })
             
@@ -155,14 +144,8 @@ class ImageService:
         else:
             created_ts = created_at
         
-        # 이미지 메타데이터 추출
-        loop = asyncio.get_running_loop()
-        img = await loop.run_in_executor(
-            None,
-            lambda: Image.open(io.BytesIO(file_content))
-        )
-        width, height = img.size
-        file_size = len(file_content)
+        # 이미지 검증 및 메타데이터 추출 (ImageProcessor 사용)
+        processed = await self.image_processor.validate_and_extract_metadata(file_content)
         
         # 파일 저장
         ext = format.lower() if format else 'png'
@@ -172,8 +155,12 @@ class ImageService:
         async with aiofiles.open(file_path, 'wb') as f:
             await f.write(file_content)
         
-        # 썸네일 생성
-        await self._create_thumbnail(img, thumb_path, size=(200, 200))
+        # 썸네일 생성 (ImageProcessor 사용)
+        await self.image_processor.create_thumbnail(
+            processed.image,
+            thumb_path,
+            size=(200, 200)
+        )
         
         # URL 경로 생성
         file_url = f"/local/original/{item_id}.{ext}"
@@ -182,9 +169,9 @@ class ImageService:
         # 메타데이터 저장
         meta = ImageMeta(
             data_id=item_id,
-            width=width,
-            height=height,
-            file_size=file_size,
+            width=processed.metadata.width,
+            height=processed.metadata.height,
+            file_size=processed.metadata.file_size,
             file_path=file_url,
             thumbnail_path=thumb_url
         )
@@ -202,45 +189,13 @@ class ImageService:
             "thumbnail_path": thumb_path,  # 파일시스템 경로
             "created_at": created_ts,
             "format": format,
-            "width": width,
-            "height": height,
-            "file_size": file_size,
+            "width": processed.metadata.width,
+            "height": processed.metadata.height,
+            "file_size": processed.metadata.file_size,
             "correlation_id": corr_id
         })
         
         return {"id": item_id, "status": "created"}
-    
-    async def _create_thumbnail(
-        self,
-        image: Image.Image,
-        path: str,
-        size: Tuple[int, int] = (256, 256)
-    ):
-        """썸네일 생성 (RGBA 이미지 처리 포함)"""
-        loop = asyncio.get_running_loop()
-        
-        def save_thumb():
-            thumb = image.copy()
-            thumb.thumbnail(size)
-            
-            # RGBA 이미지인 경우 RGB로 변환
-            if thumb.mode in ('RGBA', 'LA', 'P'):
-                # 흰색 배경 생성
-                background = Image.new('RGB', thumb.size, (255, 255, 255))
-                if thumb.mode == 'P':
-                    thumb = thumb.convert('RGBA')
-                background.paste(thumb, mask=thumb.split()[-1] if thumb.mode in ('RGBA', 'LA') else None)
-                thumb = background
-            
-            thumb.save(path, "JPEG", quality=85)
-        
-        await loop.run_in_executor(None, save_thumb)
-    
-    def _get_extension(self, filename: Optional[str], format: str) -> str:
-        """파일 확장자 추출"""
-        if filename and '.' in filename:
-            return filename.split('.')[-1]
-        return format or 'bin'
     
     def _cleanup_files(self, paths: list):
         """파일 정리"""
