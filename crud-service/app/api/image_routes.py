@@ -103,7 +103,7 @@ async def create_clipboard_data(
         
         # 기본 클립보드 아이템 생성
         from ..domain.models import ClipboardItemCreate
-        from ...shared.utility.correlationId import generate_correlation_id
+        from ..shared.utility.correlationId import generate_correlation_id
         
         item = ClipboardItemCreate(
             id=id,
