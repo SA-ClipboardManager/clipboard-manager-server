@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,9 +30,9 @@ public class MessageConsumer {
 
     @RabbitListener(queues = RabbitMQConfig.QUEUE_MAIN)
     @Transactional
-    public void receiveMessage(EventDataDto dto) {
+    public void receiveMessage(EventDataDto dto, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
            log.info("수신 ID: {}", dto.getCorrelationId());
-
+           log.info("Routing key: {}", routingKey);
         try {
             // =========================
             // ★ 비즈니스 로직 수행 구역 ★
