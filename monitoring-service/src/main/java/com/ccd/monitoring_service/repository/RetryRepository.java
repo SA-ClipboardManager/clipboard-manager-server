@@ -14,5 +14,5 @@ public interface RetryRepository extends JpaRepository<RetryEntity, Long> {
     boolean existsByCorrelationId(String correlationId);
 
    @Query("SELECT r FROM RetryEntity r WHERE r.status = :retryStatus AND r.nextAttemptAt < :now")
-    List<RetryEntity> findMessageToBeSent(LocalDateTime now, RetryStatus retryStatus);
+    List<RetryEntity> findMessageByNextAttemptAndRetryStatus(LocalDateTime now, RetryStatus retryStatus);
 }

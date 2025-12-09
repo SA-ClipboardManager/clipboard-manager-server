@@ -74,6 +74,7 @@ public class RetryEntity {
     }
 
     public void markAsPending() {
+        this.nextAttemptAt = LocalDateTime.now();
         this.status = RetryStatus.PENDING;
     }
 }
