@@ -9,12 +9,12 @@ import com.ccd.monitoring_service.entity.RetryStatus;
 import com.ccd.monitoring_service.rabbitmq.config.RabbitMQConfig;
 import com.ccd.monitoring_service.repository.RetryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -35,7 +35,7 @@ public class RetryScheduler {
         LocalDateTime now = LocalDateTime.now();
 
         List<RetryEntity> targets =
-                retryRepository.findMessageToBeSent(now, RetryStatus.FAIL);
+                retryRepository.findMessageByNextAttemptAndRetryStatus(now, RetryStatus.FAIL);
         if (targets.isEmpty()) {
             return;
         }
@@ -46,7 +46,7 @@ public class RetryScheduler {
                 Map<String, Object> tagMap =
                         objectMapper.readValue(
                                 target.getTagInfoJson(),
-                                new TypeReference<Map<String, Object>>() {
+                                new TypeReference<>() {
                                 }
                         );
 

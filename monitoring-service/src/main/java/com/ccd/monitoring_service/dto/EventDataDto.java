@@ -21,7 +21,7 @@ public class EventDataDto {
     // --- [일반 로그용 필드] ---
     private String logLevel;      // INFO, DEBUG 등 (SystemLog용)
 
-    // --- [에러 로그용 필드] ---
+    // --- [에러 로그용 필드] ---e
     private String stackTrace;    // 에러 상세 (ErrorLog용)
     private String exceptionType; // 예외 클래스 이름 (ErrorLog용)
 
