@@ -87,18 +87,22 @@ public class RetryConsumerService {
             log.warn("Not Registered Correlation ID: {}", dto.getCorrelationId());
             return;
         }
+        try {
+            entity.markAsProcessing(); // PROCESSING으로 변경 -> VERSION 올려서 우선권 획득
+            if (dto.getLogType() == LogType.SYSTEM) { // 성공으로 간주
+                log.info("재시도 성공! ID: {}", dto.getCorrelationId());
+                entity.markAsSuccess();
 
-        if (dto.getLogType() == LogType.SYSTEM) { // 성공으로 간주
-            log.info("재시도 성공! ID: {}", dto.getCorrelationId());
-            entity.markAsSuccess();
+                saveHistory(entity, RetryStatus.SUCCESS, "재시도 성공");
+            } else {
+                log.warn("재시도 또 실패. 다음 일정 예약. ID: {}", dto.getCorrelationId());
+                entity.planNextAttempt(); // 시간 뒤로 미루기
+                entity.markAsFail(dto.getMessage());
 
-            saveHistory(entity, RetryStatus.SUCCESS, "재시도 성공");
-        } else {
-            log.warn("재시도 또 실패. 다음 일정 예약. ID: {}", dto.getCorrelationId());
-            entity.planNextAttempt(); // 시간 뒤로 미루기
-            entity.markAsFail(dto.getMessage());
-
-            saveHistory(entity, RetryStatus.FAIL, dto.getServiceName());
+                saveHistory(entity, RetryStatus.FAIL, dto.getServiceName());
+            }
+        }catch (Exception e){
+            entity.markAsFail("Consumer failed: " + e.getMessage());
         }
     }
 
