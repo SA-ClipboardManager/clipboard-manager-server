@@ -55,9 +55,9 @@ public class RetryConsumerService {
         try {
             log.info("수신 | ID: {}", dto.getCorrelationId());
             Map<String, Object> tagMap = new HashMap<>();
-            tagMap.put("dataId", dto.getDataId());
-            tagMap.put("userId", dto.getUserId());
-            tagMap.put("filePath", dto.getFilePath());
+            tagMap.put("data_id", dto.getDataId());
+            tagMap.put("user_id", dto.getUserId());
+            tagMap.put("file_path", dto.getFilePath());
             tagMap.put("modelSource", dto.getModelSource());
             tagMap.put("tags", dto.getTags());
 
