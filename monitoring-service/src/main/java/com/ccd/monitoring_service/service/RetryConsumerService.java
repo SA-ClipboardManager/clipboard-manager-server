@@ -99,7 +99,7 @@ public class RetryConsumerService {
                 entity.planNextAttempt(); // 시간 뒤로 미루기
                 entity.markAsFail(dto.getMessage());
 
-                saveHistory(entity, RetryStatus.FAIL, dto.getServiceName());
+                saveHistory(entity, RetryStatus.FAIL, dto.getMessage());
             }
         }catch (Exception e){
             entity.markAsFail("Consumer failed: " + e.getMessage());
