@@ -22,6 +22,9 @@ public class RetryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Integer version;
+
     @Column(nullable = false, length = 64)
     private String correlationId;
 
@@ -76,6 +79,10 @@ public class RetryEntity {
     public void markAsPending() {
         this.nextAttemptAt = LocalDateTime.now();
         this.status = RetryStatus.PENDING;
+    }
+
+    public void markAsProcessing() {
+        this.status = RetryStatus.PROCESSING;
     }
 }
 
