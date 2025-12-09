@@ -68,9 +68,9 @@ public class RetryScheduler {
                         .logType(LogType.SYSTEM) // 재시도 전송은 SYSTEM
                         .message("Retry Attempt")
 
-                        .dataId((String) tagMap.get("dataId"))
-                        .userId((String) tagMap.get("userId"))
-                        .filePath((String) tagMap.get("filePath"))
+                        .dataId((String) tagMap.get("data_id"))
+                        .userId((String) tagMap.get("user_id"))
+                        .filePath((String) tagMap.get("file_path"))
                         .modelSource((String) tagMap.get("modelSource"))
                         .tags(parsedTags)
                         .build();
