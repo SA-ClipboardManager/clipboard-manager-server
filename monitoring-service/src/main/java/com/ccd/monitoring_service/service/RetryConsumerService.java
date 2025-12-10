@@ -54,14 +54,14 @@ public class RetryConsumerService {
 
         try {
             log.info("수신 | ID: {}", dto.getCorrelationId());
-            Map<String, Object> tagMap = new HashMap<>();
-            tagMap.put("data_id", dto.getDataId());
-            tagMap.put("user_id", dto.getUserId());
-            tagMap.put("file_path", dto.getFilePath());
-            tagMap.put("modelSource", dto.getModelSource());
+            Map<String, Object> dtopMap = new HashMap<>();
+            dtopMap.put("data_id", dto.getDataId());
+            dtopMap.put("user_id", dto.getUserId());
+            dtopMap.put("file_path", dto.getFilePath());
+            dtopMap.put("modelSource", dto.getModelSource());
 
             // 2) JSON 변환
-            String tagJson = objectMapper.writeValueAsString(tagMap);
+            String tagJson = objectMapper.writeValueAsString(dtopMap);
 
             // 3) RetryEntity 저장
             RetryEntity entity = new RetryEntity(
@@ -70,7 +70,6 @@ public class RetryConsumerService {
                     dto.getServiceName()
             );
             // 신규 등록 시에는 다음 실행 시간만 잡고 끝 (스케줄러가 가져감)
-            // 바로 실행하고 싶으면 planNextAttempt() 없이 저장하면 스케줄러가 즉시 가져감
             retryRepository.save(entity);
 
         } catch (JsonProcessingException e) {
