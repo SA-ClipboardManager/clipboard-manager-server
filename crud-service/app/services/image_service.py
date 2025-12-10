@@ -10,6 +10,7 @@ from ..domain.models import ImageMeta
 from ..domain.repositories import IClipboardRepository, IImageMetaRepository
 from ..infrastructure.message_broker import MessageBroker
 from ..infrastructure.image_processor import ImageProcessor
+from ..infrastructure.monitoring_publisher import MonitoringPublisher
 from ..core.config import settings
 from ..core.logging import logger
 
@@ -22,12 +23,14 @@ class ImageService:
         clipboard_repo: IClipboardRepository,
         image_repo: IImageMetaRepository,
         message_broker: MessageBroker,
-        image_processor: Optional[ImageProcessor] = None
+        image_processor: Optional[ImageProcessor] = None,
+        monitoring_publisher: Optional[MonitoringPublisher] = None
     ):
         self.clipboard_repo = clipboard_repo
         self.image_repo = image_repo
         self.message_broker = message_broker
         self.image_processor = image_processor or ImageProcessor()
+        self.monitoring_publisher = monitoring_publisher
         
         # 디렉토리 생성
         os.makedirs(settings.original_dir, exist_ok=True)
@@ -104,6 +107,14 @@ class ImageService:
             "correlation_id": corr_id
         })
         logger.info(f"Published event: service.crud.item.saved.img for clipboard image {item_id} [correlation_id: {corr_id}]")
+        
+        # 모니터링 성공 로그 발행
+        if self.monitoring_publisher:
+            await self.monitoring_publisher.publish_system_log(
+                correlation_id=corr_id,
+                message=f"Image uploaded successfully: {item_id} (user: {user_id}, size: {processed.metadata.file_size} bytes)",
+                log_level="INFO"
+            )
         
         return {"id": item_id, "status": "created"}
     

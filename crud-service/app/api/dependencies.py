@@ -12,6 +12,7 @@ from ..infrastructure.image_processor import ImageProcessor
 from ..services.clipboard_service import ClipboardService
 from ..services.image_service import ImageService
 from ..core.logging import logger
+from ..main import monitoring_publisher
 
 
 # ----------------------------------------------------------------------
@@ -62,7 +63,7 @@ async def get_clipboard_service(
     image_repo: ImageMetaRepository = Depends(get_image_repository)
 ) -> ClipboardService:
     """클립보드 서비스 의존성"""
-    return ClipboardService(clipboard_repo, image_repo, message_broker)
+    return ClipboardService(clipboard_repo, image_repo, message_broker, monitoring_publisher)
 
 
 async def get_image_service(
@@ -71,7 +72,7 @@ async def get_image_service(
     image_processor: ImageProcessor = Depends(get_image_processor)
 ) -> ImageService:
     """이미지 서비스 의존성"""
-    return ImageService(clipboard_repo, image_repo, message_broker, image_processor)
+    return ImageService(clipboard_repo, image_repo, message_broker, image_processor, monitoring_publisher)
 
 
 # ----------------------------------------------------------------------

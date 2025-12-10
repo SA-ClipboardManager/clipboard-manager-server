@@ -9,6 +9,7 @@ from ..domain.models import (
 )
 from ..domain.repositories import IClipboardRepository, IImageMetaRepository
 from ..infrastructure.message_broker import MessageBroker
+from ..infrastructure.monitoring_publisher import MonitoringPublisher
 from ..core.logging import logger
 
 
@@ -19,11 +20,13 @@ class ClipboardService:
         self,
         clipboard_repo: IClipboardRepository,
         image_repo: IImageMetaRepository,
-        message_broker: MessageBroker
+        message_broker: MessageBroker,
+        monitoring_publisher: Optional[MonitoringPublisher] = None
     ):
         self.clipboard_repo = clipboard_repo
         self.image_repo = image_repo
         self.message_broker = message_broker
+        self.monitoring_publisher = monitoring_publisher
     
     async def create_item(
         self,
@@ -54,6 +57,14 @@ class ClipboardService:
             payload["correlation_id"] = correlation_id
             await self.message_broker.publish_event("service.crud.item.saved.txt", payload)
             logger.info(f"Published event: service.crud.item.saved.txt for item {item_create.id} [correlation_id: {correlation_id}]")
+            
+            # 모니터링 성공 로그 발행
+            if self.monitoring_publisher:
+                await self.monitoring_publisher.publish_system_log(
+                    correlation_id=correlation_id,
+                    message=f"Text item created successfully: {item_create.id} (user: {user_id})",
+                    log_level="INFO"
+                )
         # 이미지는 image_service.upload_clipboard_image에서 이미 이벤트 발행함 (중복 방지)
         
         return item_create

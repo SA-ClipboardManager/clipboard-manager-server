@@ -146,6 +146,13 @@ async def consume_events():
                                         success=True,
                                         message=f"Retry successful: notification sent to user {target_user_id}"
                                     )
+                                # 일반 요청 성공 로그 발행
+                                elif monitoring_publisher:
+                                    await monitoring_publisher.publish_system_log(
+                                        correlation_id=inner_data.get("correlationId") or data.get("correlation_id", "unknown"),
+                                        message=f"Notification sent successfully to user {target_user_id} (event: {event_type})",
+                                        log_level="INFO"
+                                    )
                                     
                             except Exception as send_error:
                                 logger.error(f"Failed to send notification: {send_error}")
