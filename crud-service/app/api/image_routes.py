@@ -84,7 +84,7 @@ async def create_clipboard_data(
         logger.error(f"Create clipboard data failed: {e} [correlation_id: {corr_id}]", exc_info=True)
         
         # 모니터링 에러 로그 발행
-        from ..main import monitoring_publisher
+        from ..infrastructure.monitoring_provider import monitoring_publisher
         await monitoring_publisher.publish_error_log(
             correlation_id=corr_id,
             message=f"Create clipboard data failed for user {user_id}",

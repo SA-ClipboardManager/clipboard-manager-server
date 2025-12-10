@@ -12,7 +12,7 @@ from ..infrastructure.image_processor import ImageProcessor
 from ..services.clipboard_service import ClipboardService
 from ..services.image_service import ImageService
 from ..core.logging import logger
-from ..main import monitoring_publisher
+from ..infrastructure.monitoring_provider import monitoring_publisher
 
 
 # ----------------------------------------------------------------------
