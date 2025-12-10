@@ -149,7 +149,7 @@ async def consume_events():
                                 # 일반 요청 성공 로그 발행
                                 elif monitoring_publisher:
                                     await monitoring_publisher.publish_system_log(
-                                        correlation_id=inner_data.get("correlationId") or data.get("correlation_id", "unknown"),
+                                        correlation_id=inner_data.get("correlationId") or inner_data.get("correlation_id") or data.get("correlation_id", "unknown"),
                                         message=f"Notification sent successfully to user {target_user_id} (event: {event_type})",
                                         log_level="INFO"
                                     )
@@ -169,7 +169,7 @@ async def consume_events():
                                     # 일반 요청 실패는 에러 로그로
                                     if monitoring_publisher:
                                         await monitoring_publisher.publish_error_log(
-                                            correlation_id=inner_data.get("correlationId") or data.get("correlation_id", "unknown"),
+                                            correlation_id=inner_data.get("correlationId") or inner_data.get("correlation_id") or data.get("correlation_id", "unknown"),
                                             message=f"Failed to send notification",
                                             exception=send_error
                                         )
