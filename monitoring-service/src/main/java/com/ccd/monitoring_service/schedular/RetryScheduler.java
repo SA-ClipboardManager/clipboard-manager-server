@@ -3,7 +3,6 @@ package com.ccd.monitoring_service.schedular;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.ccd.monitoring_service.dto.EventDataDto;
 import com.ccd.monitoring_service.dto.LogType;
-import com.ccd.monitoring_service.dto.TagDto;
 import com.ccd.monitoring_service.entity.RetryEntity;
 import com.ccd.monitoring_service.entity.RetryStatus;
 import com.ccd.monitoring_service.rabbitmq.config.RabbitMQConfig;
@@ -43,36 +42,23 @@ public class RetryScheduler {
             log.info("Retry Correlation ID: [{}], Service: [{}]", target.getCorrelationId(), target.getServiceName());
             try {
                 // 1) tagInfoJson 파싱
-                Map<String, Object> tagMap =
+                Map<String, Object> messageMap =
                         objectMapper.readValue(
                                 target.getTagInfoJson(),
                                 new TypeReference<>() {
                                 }
                         );
-
-                // 2) tags 파싱 (List<Map> → List<TagDto>)
-                List<Map<String, Object>> rawTags =
-                        (List<Map<String, Object>>) tagMap.get("tags");
-
-                List<TagDto> parsedTags = rawTags == null ? null :
-                        rawTags.stream()
-                                .map(m -> new TagDto(
-                                        (String) m.get("label"),
-                                        Float.parseFloat(m.get("score").toString())
-                                ))
-                                .toList();
-                // 3) EventDataDto 복원
+                // 2) EventDataDto 복원
                 EventDataDto dto = EventDataDto.builder()
                         .correlationId(target.getCorrelationId())
                         .serviceName(target.getServiceName())
                         .logType(LogType.SYSTEM) // 재시도 전송은 SYSTEM
                         .message("Retry Attempt")
 
-                        .dataId((String) tagMap.get("data_id"))
-                        .userId((String) tagMap.get("user_id"))
-                        .filePath((String) tagMap.get("file_path"))
-                        .modelSource((String) tagMap.get("modelSource"))
-                        .tags(parsedTags)
+                        .dataId((String) messageMap.get("data_id"))
+                        .userId((String) messageMap.get("user_id"))
+                        .filePath((String) messageMap.get("file_path"))
+                        .modelSource((String) messageMap.get("modelSource"))
                         .build();
                 target.markAsPending();
                 rabbitTemplate.convertAndSend(

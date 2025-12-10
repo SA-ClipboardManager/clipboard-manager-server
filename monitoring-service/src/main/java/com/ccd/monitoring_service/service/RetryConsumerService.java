@@ -59,7 +59,6 @@ public class RetryConsumerService {
             tagMap.put("user_id", dto.getUserId());
             tagMap.put("file_path", dto.getFilePath());
             tagMap.put("modelSource", dto.getModelSource());
-            tagMap.put("tags", dto.getTags());
 
             // 2) JSON 변환
             String tagJson = objectMapper.writeValueAsString(tagMap);
