@@ -71,8 +71,8 @@ async def consume_events():
         await monitoring_publisher.connect(channel)
         logger.info("MonitoringPublisher initialized")
 
-        # 2-1. Fanout Exchange 선언 (기존 notifications)
-        notifications_exchange = await channel.declare_exchange("notifications", aio_pika.ExchangeType.FANOUT)
+        # 2-1. Fanout Exchange 선언 (기존 notifications) - 사용 안 함
+        # notifications_exchange = await channel.declare_exchange("notifications", aio_pika.ExchangeType.FANOUT)
         
         # 2-2. Topic Exchange 선언 (main.exchange - monitoring-service 규격)
         main_exchange = await channel.declare_exchange("main.exchange", aio_pika.ExchangeType.TOPIC, durable=True)
@@ -80,12 +80,12 @@ async def consume_events():
         # 3. 임시 큐 생성 (Exclusive=True: 이 서비스가 꺼지면 큐도 삭제됨)
         queue = await channel.declare_queue(exclusive=True)
         
-        # 4. Exchange 바인딩
-        await queue.bind(notifications_exchange)  # notifications exchange (fanout)
+        # 4. Exchange 바인딩 (main.exchange만 사용하여 중복 수신 방지)
+        # await queue.bind(notifications_exchange)  # 중복 수신 방지를 위해 제거
         await queue.bind(main_exchange, routing_key="service.#")  # main.exchange의 모든 service.* 이벤트
         await queue.bind(main_exchange, routing_key="notification-service.do.retry")  # 재시도 요청
 
-        logger.info(" [*] Waiting for notification events (notifications + main.exchange + retry requests)...")
+        logger.info(" [*] Waiting for notification events (main.exchange + retry requests)...")
 
         # 5. 메시지 수신 루프
         async with queue.iterator() as queue_iter:
