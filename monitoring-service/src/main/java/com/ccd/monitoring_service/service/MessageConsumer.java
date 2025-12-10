@@ -80,7 +80,6 @@ public class MessageConsumer {
             taggingMap.put("userId", dto.getUserId());
             taggingMap.put("filePath", dto.getFilePath());
             taggingMap.put("modelSource", dto.getModelSource());
-            taggingMap.put("tags", dto.getTags());
 
             String tagJson = mapper.writeValueAsString(taggingMap);
 
