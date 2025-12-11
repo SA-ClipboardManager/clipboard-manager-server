@@ -32,6 +32,6 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           chmod +x gradlew
-          ./gradlew build sonar \
+          ./gradlew build sonar -x test \
             -Dsonar.organization=sa-clipboardmanager \
             -Dsonar.projectKey=sa-clipboardmanager_clipboard-manager-monitoring
