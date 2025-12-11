@@ -1,0 +1,84 @@
+name: Sonar Analysis (Python Services)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths: # 아래 폴더들이 변경될 때만 실행
+      - 'crud-service/**'
+      - 'login-service/**'
+      - 'notification-service/**'
+  pull_request:
+    paths:
+      - 'crud-service/**'
+      - 'login-service/**'
+      - 'notification-service/**'
+
+jobs:
+  # ------------------------------------------------------------------
+  # 1. CRUD Service
+  # ------------------------------------------------------------------
+  scan-crud:
+    if: always() # 다른 작업이 실패해도 얘는 실행
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: SonarCloud Scan (CRUD)
+        uses: SonarSource/sonarcloud-github-action@v3.1.0 # 보안 경고 해결된 버전
+        with:
+          projectBaseDir: crud-service
+          args: >
+            -Dsonar.organization=sa-clipboardmanager
+            -Dsonar.projectKey=sa-clipboardmanager_clipboard-manager-crud
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/venv/**,**/__pycache__/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ------------------------------------------------------------------
+  # 2. Login Service
+  # ------------------------------------------------------------------
+  scan-login:
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: SonarCloud Scan (Login)
+        uses: SonarSource/sonarcloud-github-action@v3.1.0
+        with:
+          projectBaseDir: login-service
+          args: >
+            -Dsonar.organization=sa-clipboardmanager
+            -Dsonar.projectKey=sa-clipboardmanager_clipboard-manager-login
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/venv/**,**/__pycache__/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ------------------------------------------------------------------
+  # 3. Notification Service
+  # ------------------------------------------------------------------
+  scan-notification:
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: SonarCloud Scan (Notification)
+        uses: SonarSource/sonarcloud-github-action@v3.1.0
+        with:
+          projectBaseDir: notification-service
+          args: >
+            -Dsonar.organization=sa-clipboardmanager
+            -Dsonar.projectKey=sa-clipboardmanager_clipboard-manager-notification
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/venv/**,**/__pycache__/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
