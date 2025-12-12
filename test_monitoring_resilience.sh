@@ -56,41 +56,47 @@ print_section() {
 check_dependencies() {
     print_section "의존성 확인"
     
-    local missing_deps=0
+    local missing=0
     
-    if ! command -v docker &> /dev/null; then
-        print_failure "Docker가 설치되지 않았습니다"
-        missing_deps=1
-    else
+    # Docker 확인
+    if command -v docker >/dev/null 2>&1; then
         print_success "Docker 설치 확인"
+    else
+        print_failure "Docker 미설치"
+        missing=1
     fi
     
-    if docker compose version >/dev/null 2>&1 || docker-compose version >/dev/null 2>&1; then
-        print_success "Docker Compose 설치 확인"
+    # Docker Compose 확인 (v1, v2 모두)
+    if docker compose version >/dev/null 2>&1; then
+        print_success "Docker Compose 설치 확인 (docker compose)"
+        DOCKER_COMPOSE="docker compose"
+    elif docker-compose version >/dev/null 2>&1; then
+        print_success "Docker Compose 설치 확인 (docker-compose)"
+        DOCKER_COMPOSE="docker-compose"
     else
-        print_failure "Docker Compose가 설치되지 않았습니다"
+        print_failure "Docker Compose 미설치"
         echo "  설치: sudo apt install -y docker-compose-plugin" >&2
-        missing_deps=1
+        missing=1
     fi
     
-    if ! command -v curl &> /dev/null; then
-        print_failure "curl이 설치되지 않았습니다"
-        missing_deps=1
-    else
+    # curl 확인
+    if command -v curl >/dev/null 2>&1; then
         print_success "curl 설치 확인"
-    fi
-    
-    if ! command -v jq &> /dev/null; then
-        print_warning "jq가 설치되지 않았습니다 (JSON 파싱에 권장)"
     else
-        print_success "jq 설치 확인"
+        print_failure "curl 미설치"
+        missing=1
     fi
     
-    if [ $missing_deps -eq 1 ]; then
-        echo -e "\n${RED}필수 의존성이 설치되지 않았습니다. 설치 후 다시 실행하세요.${NC}"
-        echo "설치 방법:"
-        echo "  sudo apt update"
-        echo "  sudo apt install -y docker.io docker-compose curl jq"
+    # jq 확인 (선택)
+    if command -v jq >/dev/null 2>&1; then
+        print_success "jq 설치 확인"
+    else
+        print_warning "jq 미설치 (권장하지만 필수 아님)"
+    fi
+    
+    if [ $missing -eq 1 ]; then
+        echo -e "\n${RED}필수 의존성 설치 필요${NC}"
+        echo "sudo apt update && sudo apt install -y docker.io docker-compose-plugin curl"
         exit 1
     fi
 }
@@ -112,6 +118,9 @@ resolve_docker_compose() {
     echo "설치 예시: sudo apt install -y docker-compose-plugin" 1>&2
     return 1
 }
+
+# 전역 변수로 DOCKER_COMPOSE 설정 (의존성 체크에서)
+DOCKER_COMPOSE=""
 
 check_service_running() {
     local service=$1
@@ -377,11 +386,8 @@ main() {
     echo "Base URL: $BASE_URL"
     echo ""
     
-    # 의존성 확인
+    # 의존성 확인 (DOCKER_COMPOSE 전역 변수 설정됨)
     check_dependencies
-
-    # Docker Compose 명령어 결정 (의존성 확인 이후 실행)
-    DOCKER_COMPOSE=$(resolve_docker_compose) || exit 1
     
     # 1. 모니터링 서비스 중단
     stop_monitoring_service

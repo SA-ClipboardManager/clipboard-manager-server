@@ -63,67 +63,67 @@ print_section() {
 check_dependencies() {
     print_section "의존성 확인"
     
-    local missing_deps=0
+    local missing=0
     
-    if ! command -v docker &> /dev/null; then
-        print_failure "Docker 미설치"
-        missing_deps=1
-    else
+    # Docker 확인
+    if command -v docker >/dev/null 2>&1; then
         print_success "Docker 설치 확인"
+    else
+        print_failure "Docker 미설치"
+        missing=1
     fi
     
-    if ! command -v docker compose &> /dev/null && ! command -v docker-compose &> /dev/null; then
+    # Docker Compose 확인 (v1, v2 모두)
+    if docker compose version >/dev/null 2>&1; then
+        print_success "Docker Compose 설치 확인 (docker compose)"
+        DOCKER_COMPOSE="docker compose"
+    elif docker-compose version >/dev/null 2>&1; then
+        print_success "Docker Compose 설치 확인 (docker-compose)"
+        DOCKER_COMPOSE="docker-compose"
+    else
         print_failure "Docker Compose 미설치"
-        missing_deps=1
-    else
-        print_success "Docker Compose 설치 확인"
+        echo "  설치: sudo apt install -y docker-compose-plugin" >&2
+        missing=1
     fi
     
-    if ! command -v curl &> /dev/null; then
-        print_failure "curl 미설치"
-        missing_deps=1
-    else
+    # curl 확인
+    if command -v curl >/dev/null 2>&1; then
         print_success "curl 설치 확인"
+    else
+        print_failure "curl 미설치"
+        missing=1
     fi
     
-    if ! command -v jq &> /dev/null; then
-        print_warning "jq 미설치 (JSON 파싱에 권장)"
-        echo "  설치: sudo apt install -y jq"
-    else
+    # jq 확인 (선택)
+    if command -v jq >/dev/null 2>&1; then
         print_success "jq 설치 확인"
+    else
+        print_warning "jq 미설치 (권장하지만 필수 아님)"
     fi
     
-    if ! command -v mysql &> /dev/null; then
-        print_warning "mysql 클라이언트 미설치 (DB 직접 조회용)"
-        echo "  설치: sudo apt install -y mysql-client"
-    else
+    # mysql 클라이언트 확인 (선택)
+    if command -v mysql >/dev/null 2>&1; then
         print_success "mysql 클라이언트 설치 확인"
-    fi
-    
-    if ! command -v uuidgen &> /dev/null; then
-        print_warning "uuidgen 미설치 (Correlation ID 생성용)"
     else
-        print_success "uuidgen 설치 확인"
+        print_warning "mysql 클라이언트 미설치 (DB 직접 조회용, 필수 아님)"
     fi
     
-    if [ $missing_deps -eq 1 ]; then
-        echo -e "\n${RED}필수 의존성이 설치되지 않았습니다.${NC}"
-        echo "설치 방법:"
-        echo "  sudo apt update"
-        echo "  sudo apt install -y docker.io docker-compose curl jq mysql-client uuid-runtime"
+    if [ $missing -eq 1 ]; then
+        echo -e "\n${RED}필수 의존성 설치 필요${NC}"
+        echo "sudo apt update && sudo apt install -y docker.io docker-compose-plugin curl"
         exit 1
     fi
 }
 
 get_docker_compose_cmd() {
-    if command -v docker compose &> /dev/null; then
+    if docker compose version >/dev/null 2>&1; then
         echo "docker compose"
     else
         echo "docker-compose"
     fi
 }
 
-DOCKER_COMPOSE=$(get_docker_compose_cmd)
+DOCKER_COMPOSE=""
 
 generate_correlation_id() {
     if command -v uuidgen &> /dev/null; then
@@ -507,7 +507,7 @@ main() {
     echo "아이템 수: $ITEM_COUNT"
     echo ""
     
-    # 의존성 확인
+    # 의존성 확인 (DOCKER_COMPOSE 전역 변수 설정됨)
     check_dependencies
     
     # 0. 테스트 사용자 설정
