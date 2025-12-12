@@ -1,16 +1,16 @@
 package com.ccd.monitoring_service.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
-
-import java.util.List;
 
 @Data
 @Builder
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class EventDataDto {
     // --- [공통 필드] ---
     @JsonProperty("correlation_id")
@@ -37,6 +37,5 @@ public class EventDataDto {
     @JsonProperty("file_path")
     @JsonAlias({"filePath"})
     private String filePath;        // 파일 경로
-    private List<TagDto> tags;      // 태깅 결과 (옵션)
     private String modelSource;     // 예: mobilenetv3
 }
