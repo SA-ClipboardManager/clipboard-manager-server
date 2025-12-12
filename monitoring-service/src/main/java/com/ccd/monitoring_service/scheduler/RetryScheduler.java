@@ -62,7 +62,7 @@ public class RetryScheduler {
                 // 2) EventDataDto 복원
                 EventDataDto dto = EventDataDto.builder()
                         .correlationId(target.getCorrelationId())
-                        .serviceName(serviceName)
+                        .serviceName(target.getServiceName())
                         .logType(LogType.SYSTEM) // 재시도 전송은 SYSTEM
                         .message("Retry Attempt")
 
