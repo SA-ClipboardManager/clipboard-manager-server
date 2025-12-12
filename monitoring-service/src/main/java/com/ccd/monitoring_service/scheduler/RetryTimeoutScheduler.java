@@ -1,4 +1,4 @@
-package com.ccd.monitoring_service.schedular;
+package com.ccd.monitoring_service.scheduler;
 
 import com.ccd.monitoring_service.entity.RetryEntity;
 import com.ccd.monitoring_service.entity.RetryHistoryEntity;
@@ -22,9 +22,9 @@ public class RetryTimeoutScheduler {
 
     private final RetryRepository retryRepository;
     private final RetryHistoryRepository retryHistoryRepository;
-    private final Long maxPendingMinute = 5L;
+    private static final Long maxPendingMinute = 5L;
 
-    @Scheduled(fixedRate = 20000)
+    @Scheduled(fixedRate = 20000) //20초마다 반복
     @Transactional
     public void saveHistory() {
         LocalDateTime now = LocalDateTime.now();

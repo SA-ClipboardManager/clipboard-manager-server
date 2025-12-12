@@ -84,5 +84,9 @@ public class RetryEntity {
     public void markAsProcessing() {
         this.status = RetryStatus.PROCESSING;
     }
+
+    public void setRetryStatus(RetryStatus status) {
+        this.status = status;
+    }
 }
 

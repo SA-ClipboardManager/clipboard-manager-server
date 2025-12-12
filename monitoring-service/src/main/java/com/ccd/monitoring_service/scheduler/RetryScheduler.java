@@ -1,4 +1,4 @@
-package com.ccd.monitoring_service.schedular;
+package com.ccd.monitoring_service.scheduler;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.ccd.monitoring_service.dto.EventDataDto;
@@ -41,13 +41,24 @@ public class RetryScheduler {
         for (RetryEntity target : targets) {
             log.info("Retry Correlation ID: [{}], Service: [{}]", target.getCorrelationId(), target.getServiceName());
             try {
+                String serviceName = target.getTagInfoJson().equals("crud") ? "crud" : target.getServiceName();
+
                 // 1) tagInfoJson 파싱
-                Map<String, Object> messageMap =
-                        objectMapper.readValue(
-                                target.getTagInfoJson(),
-                                new TypeReference<>() {
-                                }
-                        );
+                Map<String, Object> messageMap;
+                try {
+                    messageMap = objectMapper.readValue(
+                            target.getTagInfoJson(),
+                            new TypeReference<>() {
+                            }
+                    );
+                } catch (Exception e) {
+                    // "crud" 문자열이거나 JSON 형식이 아닌 경우 여기서 처리
+                    messageMap = new java.util.HashMap<>();
+                    messageMap.put("data_id", "");
+                    messageMap.put("user_id", "");
+                    messageMap.put("file_path", "");
+                    messageMap.put("modelSource", "");
+                }
                 // 2) EventDataDto 복원
                 EventDataDto dto = EventDataDto.builder()
                         .correlationId(target.getCorrelationId())
@@ -63,12 +74,13 @@ public class RetryScheduler {
                 target.markAsPending();
                 rabbitTemplate.convertAndSend(
                         RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE,
-                        target.getServiceName() + ".do.retry",
+                        serviceName + ".do.retry",
                         dto
                 );
                 log.info("송신 | send to Exchange: [{}]", RabbitMQConfig.MONITORING_RECOVERY_EXCHANGE);
             } catch (Exception e) {
                 log.error("재발송 중 에러 발생 (심각)", e);
+                target.setRetryStatus(RetryStatus.FAIL); //roll back
                 // 재시도 횟수가 너무 많으면(예: 10회) delete 하거나 별도 알림 보내는 로직 추가 필요 OR 보상 트랜잭션
             }
         }
