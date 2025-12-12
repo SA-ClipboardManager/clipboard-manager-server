@@ -251,4 +251,5 @@ volumes:
 
 networks:
   clip-net:
-    driver: bridge
+    external: true
+    name: clip-net
