@@ -31,6 +31,8 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: crud_db
       TZ: Asia/Seoul
+    ports:
+      - "3307:3306"
     volumes:
       - crud_mysql_data:/var/lib/mysql
     networks:
