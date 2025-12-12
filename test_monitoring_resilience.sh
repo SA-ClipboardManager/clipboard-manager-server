@@ -14,7 +14,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 설정
-BASE_URL="${BASE_URL:-http://localhost:8576}"
+BASE_URL="${BASE_URL:-http://133.186.229.40:8576}"
 USERNAME="testuser_$(date +%s)"
 PASSWORD="testpass123"
 EMAIL="testuser_$(date +%s)@example.com"
@@ -65,11 +65,12 @@ check_dependencies() {
         print_success "Docker 설치 확인"
     fi
     
-    if ! command -v docker compose &> /dev/null && ! command -v docker-compose &> /dev/null; then
-        print_failure "Docker Compose가 설치되지 않았습니다"
-        missing_deps=1
-    else
+    if docker compose version >/dev/null 2>&1 || docker-compose version >/dev/null 2>&1; then
         print_success "Docker Compose 설치 확인"
+    else
+        print_failure "Docker Compose가 설치되지 않았습니다"
+        echo "  설치: sudo apt install -y docker-compose-plugin" >&2
+        missing_deps=1
     fi
     
     if ! command -v curl &> /dev/null; then
@@ -95,15 +96,22 @@ check_dependencies() {
 }
 
 # Docker Compose 명령어 선택 (docker compose vs docker-compose)
-get_docker_compose_cmd() {
-    if command -v docker compose &> /dev/null; then
+resolve_docker_compose() {
+    # docker compose v2 우선, 없으면 docker-compose v1 확인
+    if docker compose version >/dev/null 2>&1; then
         echo "docker compose"
-    else
-        echo "docker-compose"
+        return 0
     fi
-}
 
-DOCKER_COMPOSE=$(get_docker_compose_cmd)
+    if docker-compose version >/dev/null 2>&1; then
+        echo "docker-compose"
+        return 0
+    fi
+
+    echo -e "${RED}Docker Compose가 설치되어 있지 않습니다.${NC}" 1>&2
+    echo "설치 예시: sudo apt install -y docker-compose-plugin" 1>&2
+    return 1
+}
 
 check_service_running() {
     local service=$1
@@ -371,6 +379,9 @@ main() {
     
     # 의존성 확인
     check_dependencies
+
+    # Docker Compose 명령어 결정 (의존성 확인 이후 실행)
+    DOCKER_COMPOSE=$(resolve_docker_compose) || exit 1
     
     # 1. 모니터링 서비스 중단
     stop_monitoring_service

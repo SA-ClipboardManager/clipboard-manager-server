@@ -14,14 +14,14 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # 설정
-BASE_URL="${BASE_URL:-http://localhost:8576}"
-DB_HOST="${DB_HOST:-localhost}"
+BASE_URL="${BASE_URL:-http://133.186.229.40:8576}"
+DB_HOST="${DB_HOST:-133.186.229.40}"
 DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-root}"
 DB_PASS="${DB_PASS:-qwerty}"
 RABBITMQ_USER="${RABBITMQ_USER:-qwerty}"
 RABBITMQ_PASS="${RABBITMQ_PASS:-qwerty}"
-RABBITMQ_URL="${RABBITMQ_URL:-http://localhost:15672}"
+RABBITMQ_URL="${RABBITMQ_URL:-http://133.186.229.40:15672}"
 ITEM_COUNT="${ITEM_COUNT:-10}"
 
 # 통계 변수
