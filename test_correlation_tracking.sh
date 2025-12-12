@@ -73,19 +73,6 @@ check_dependencies() {
         missing=1
     fi
     
-    # Docker Compose 확인 (v1, v2 모두)
-    if docker compose version >/dev/null 2>&1; then
-        print_success "Docker Compose 설치 확인 (docker compose)"
-        DOCKER_COMPOSE="docker compose"
-    elif docker-compose version >/dev/null 2>&1; then
-        print_success "Docker Compose 설치 확인 (docker-compose)"
-        DOCKER_COMPOSE="docker-compose"
-    else
-        print_failure "Docker Compose 미설치"
-        echo "  설치: sudo apt install -y docker-compose-plugin" >&2
-        missing=1
-    fi
-    
     # curl 확인
     if command -v curl >/dev/null 2>&1; then
         print_success "curl 설치 확인"
